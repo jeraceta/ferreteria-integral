@@ -1,3 +1,5 @@
 {
-    "CodeGPT.apiKey": "OpenAI"
+  "CodeGPT.apiKey": "OpenAI",
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode"
 }

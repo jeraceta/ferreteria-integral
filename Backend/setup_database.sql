@@ -25,13 +25,6 @@ CREATE TABLE IF NOT EXISTS proveedores (
     email VARCHAR(100)
 );
 
--- NUEVA TABLA DE CATEGORIAS
-CREATE TABLE IF NOT EXISTS categorias (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(100) UNIQUE NOT NULL,
-    descripcion TEXT
-);
-
 -- 4. TABLA DE PRODUCTOS
 -- Contiene el STOCK y el COSTO (se actualizan con las transacciones)
 CREATE TABLE IF NOT EXISTS productos (
@@ -42,10 +35,8 @@ CREATE TABLE IF NOT EXISTS productos (
     stock INT DEFAULT 0,
     precio_venta DECIMAL(10, 2) NOT NULL,
     precio_costo DECIMAL(10, 2) NOT NULL,
-    id_categoria INT NOT NULL, -- Nueva columna para la categoría
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fecha_modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_categoria) REFERENCES categorias(id)
+    fecha_modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- 5. TABLA DE VENTAS (Cabecera de la factura)
@@ -126,14 +117,5 @@ CREATE TABLE IF NOT EXISTS movimientos_inventario (
 
 INSERT INTO clientes (nombre, identificacion) VALUES ('Cliente Prueba Principal', 'V-12345678');
 INSERT INTO proveedores (nombre, contacto) VALUES ('Proveedor Principal S.A.', 'Juan Pérez');
-
--- Insertar categorías
-INSERT INTO categorias (nombre, descripcion) VALUES ('Herramientas Manuales', 'Herramientas que no requieren energía eléctrica.');
-INSERT INTO categorias (nombre, descripcion) VALUES ('Materiales de Construcción', 'Materiales básicos para obras.');
-
--- Modificar inserción de productos para incluir id_categoria
-INSERT INTO productos (codigo, nombre, stock, precio_venta, precio_costo, id_categoria) 
-VALUES ('CL-001', 'Clavos de 2 Pulgadas', 50, 2.50, 1.50, 1); -- Asignado a Herramientas Manuales
-
-INSERT INTO productos (codigo, nombre, stock, precio_venta, precio_costo, id_categoria) 
-VALUES ('CE-002', 'Cemento Portland', 20, 10.00, 7.00, 2); -- Asignado a Materiales de Construcción
+INSERT INTO productos (codigo, nombre, stock, precio_venta, precio_costo) 
+VALUES ('CL-001', 'Clavos de 2 Pulgadas', 50, 2.50, 1.50);

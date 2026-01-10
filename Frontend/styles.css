@@ -1,0 +1,379 @@
+/* styles.css */
+
+body {
+    overflow-x: hidden; /* Prevent horizontal scrollbar */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa; /* Light background for consistency */
+}
+
+#wrapper {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Custom Navbar styles */
+.custom-navbar {
+    height: 56px; /* Moderate height */
+    background-color: #004085 !important; /* Corporate blue */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.custom-navbar .navbar-brand,
+.custom-navbar .nav-link {
+    color: white !important;
+}
+
+.custom-navbar .nav-link:hover {
+    color: #c0dffb !important;
+}
+
+/* Custom Sidebar styles */
+.sidebar {
+    min-width: 180px;
+    max-width: 180px;
+    background: #212529; /* Dark grey */
+    color: #fff;
+    transition: margin .25s ease-out;
+    box-shadow: 2px 0px 5px rgba(0,0,0,0.1);
+    position: fixed; /* Make sidebar fixed */
+    height: 100vh;
+    z-index: 100; /* Ensure it's above content */
+    top: 0;
+}
+
+.sidebar .logo-container {
+    text-align: center;
+    padding: 10px 0; /* Add some padding around the logo */
+    border-bottom: 1px solid #495057; /* Separator for the logo area */
+}
+
+.sidebar .logo-container img {
+    max-height: 80px;
+    max-width: 100%;
+    object-fit: contain;
+    display: block; /* Ensure it behaves like a block element for sizing */
+    margin: 0 auto; /* Center the image */
+}
+
+.sidebar .sidebar-heading {
+    padding: 1rem;
+    font-size: 1.2rem;
+    color: #f8f9fa;
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 1px solid #495057;
+    height: auto; /* Allow height to adjust based on content */
+    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+}
+
+.sidebar .list-group {
+    width: 100%;
+}
+
+.sidebar .list-group-item {
+    padding: 10px 15px;
+    font-size: 1.1em;
+    color: #adb5bd; /* Light grey for text */
+    background-color: #212529; /* Match sidebar background */
+    border: none; /* Remove default list-group-item border */
+}
+
+.sidebar .list-group-item:hover,
+.sidebar .list-group-item.active {
+    color: #f8f9fa;
+    background: #343a40; /* Slightly lighter dark grey on hover/active */
+    text-decoration: none;
+}
+
+/* Content area styles */
+#page-content-wrapper {
+    width: calc(100% - 180px); /* Ocupa el espacio restante */
+    margin-left: 180px; /* Offset for the fixed sidebar */
+    transition: margin .25s ease-out;
+}
+
+.content-offset {
+    padding-top: 56px; /* Offset for fixed navbar */
+    flex-grow: 1;
+    padding: 10px;
+}
+
+/* Toggled sidebar state (mobile/collapsed) */
+#wrapper.toggled .sidebar {
+    margin-left: -180px;
+}
+
+#wrapper.toggled #page-content-wrapper {
+    margin-left: 0; /* Full width when sidebar is toggled */
+}
+
+/* Hamburger menu button */
+#menu-toggle {
+    color: #fff;
+    background-color: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    margin-right: 15px; /* Space between toggle and brand */
+}
+
+#menu-toggle:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+h2 { font-size: 1rem; margin-bottom: 5px; } /* Adjusted heading sizes for compactness */
+h4 { font-size: 0.9rem; margin-bottom: 3px; }
+h5 { font-size: 0.8rem; margin-bottom: 2px; }
+h6 { font-size: 0.75rem; margin-bottom: 1px; }
+
+/* Specific adjustments for cards and form elements */
+.card {
+    margin-bottom: 5px; /* Reduced margin-bottom */
+    border-radius: 4px; /* Slightly smaller border radius */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Lighter shadow */
+}
+
+.card-header {
+    background-color: #007bff;
+    color: white;
+    font-weight: bold;
+    padding: 3px 5px; /* Further reduced padding */
+    font-size: 0.9rem; /* Further reduced font size */
+    border-radius: 3px 3px 0 0;
+}
+
+.card-body {
+    padding: 5px; /* Reduced padding */
+}
+
+.form-group {
+    margin-bottom: 0.2rem; /* Further reduced space between form elements */
+}
+
+.form-control {
+    padding: 0.25rem 0.5rem; /* Smaller padding */
+    font-size: 0.8rem; /* Slightly smaller font for inputs */
+}
+
+.btn {
+    padding: 0.25rem 0.5rem; /* Smaller button padding */
+    font-size: 0.8rem; /* Smaller button font size */
+}
+
+/* AÑADIDO: Estilos para el formulario de dos columnas */
+.form-row-compact {
+    display: flex;
+    gap: 1rem; /* Espacio entre las columnas */
+}
+.form-row-compact > .form-group {
+    flex: 1; /* Cada grupo de formulario ocupa el mismo espacio */
+}
+
+
+/* Specific styles for Sales Module predictive search dropdown */
+#listaSugerenciasProductos {
+    position: absolute;
+    /* Adjust width to match the input field if it's inside a relative container */
+    /* For now, we assume it's a sibling and may need full width of its parent */
+    width: calc(100% - 2rem); /* Example: Adjust based on parent padding */
+    z-index: 10000;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-top: none;
+    max-height: 250px;
+    overflow-y: auto;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.sugerencia-item {
+    padding: 0.75rem 1.25rem;
+    cursor: pointer;
+    background-color: #fff;
+    color: #212529;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.sugerencia-item:last-child {
+    border-bottom: none;
+}
+
+.sugerencia-item:hover {
+    background-color: #0d6efd; /* Bootstrap primary blue */
+    color: #fff;
+}
+
+.sugerencia-item.no-results {
+    font-style: italic;
+    color: #6c757d;
+    cursor: default;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .sidebar {
+        margin-left: -180px;
+        position: fixed; /* Keep fixed on mobile */
+    }
+
+    #page-content-wrapper {
+        margin-left: 0; /* No offset when sidebar is hidden */
+    }
+
+    #wrapper.toggled .sidebar {
+        margin-left: 0;
+    }
+
+    #wrapper.toggled #page-content-wrapper {
+        margin-left: 180px; /* Offset for open sidebar */
+    }
+
+    .navbar-toggler {
+        display: block; /* Ensure toggler is visible on mobile */
+    }
+
+    #menu-toggle {
+        order: -1; /* Place toggle button first on mobile */
+    }
+    
+    /* AÑADIDO: Forzar el apilamiento de las columnas del formulario en móvil */
+    .form-row-compact {
+        flex-direction: column;
+        gap: 0.2rem;
+    }
+
+
+    /* Sales module columns stack on mobile */
+    .sales-columns {
+        flex-direction: column;
+    }
+    .sales-columns .col-md-4,
+    .sales-columns .col-md-8 {
+        max-width: 100%;
+        flex: 0 0 100%;
+    }
+}
+
+/* Styles from productos.html for client mode */
+body.modo-cliente-activo .columna-acciones,
+body.modo-cliente-activo #btnNuevoProducto {
+    display: none;
+}
+
+/* 50/50 Layout for Sales Module on larger screens */
+@media (min-width: 769px) { /* Apply only for desktop screens */
+    #page-content {
+        display: flex;
+        flex-direction: column;
+        /* Calculate height to fill viewport, subtracting fixed header/navbar/tab height */
+        /* Approximate 56px for navbar, 36px for h2, 42px for nav-tabs */
+        height: calc(100vh - 134px);
+        padding-top: 0; /* Remove top padding to use full height */
+        padding-bottom: 0; /* Remove top padding to use full height */
+    }
+
+    .sales-layout-50-50 {
+        flex-grow: 1; /* Make the row take all available vertical space */
+        display: flex;
+        height: 100%; /* Ensure columns can inherit this height */
+        margin-top: 0; /* Remove default row margin-top */
+        margin-bottom: 0; /* Remove default row margin-bottom */
+    }
+
+    /* MODIFICADO: La columna de la derecha ahora es un flex container */
+    .sales-layout-50-50 > .col-md-6 {
+        display: flex;
+        flex-direction: column;
+        height: 100%; /* Ensure columns fill the height of their parent */
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+    
+    .sales-layout-50-50 .card {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 5px; /* Keep consistent with existing card margin */
+    }
+    
+    .sales-layout-50-50 .card.card-productos-venta {
+         flex-grow: 1; /* El card de productos crece */
+    }
+
+
+    .sales-layout-50-50 .card-body {
+        flex-grow: 1; /* Allow card-body to grow and fill space */
+        overflow-y: auto; /* Enable vertical scrolling within card-body if content overflows */
+        /* Adjust padding if needed, already set to 5px globally */
+    }
+
+    /* Specific adjustments for the product search card to prevent it from growing too much */
+    .sales-layout-50-50 .col-md-6:first-child .card:first-child {
+        flex-grow: 0; /* Prevent the client data card from growing */
+    }
+}
+
+/* MODIFICADO: Estilos para el nuevo resumen de ventas */
+.sales-summary-box {
+    flex-shrink: 0; /* Previene que el contenedor se encoja */
+    padding: 8px;
+    background-color: #e9ecef; /* Un fondo ligeramente diferente */
+    border-top: 1px solid #dee2e6;
+    text-align: right; /* Align text to the right */
+    font-weight: bold; /* Texto en negrita como se pidió */
+}
+
+.sales-summary-box p {
+    margin-bottom: 2px;
+    font-size: 0.9rem;
+}
+
+.sales-summary-box p.total-final strong {
+    font-size: 1.1rem; /* Total final más grande */
+    color: #007bff;
+}
+
+.sales-summary-box .text-muted {
+    font-weight: normal; /* No negrita para la tasa BCV */
+}
+
+.sales-summary-box button {
+    margin-top: 5px;
+}
+/* Estilo Compacto para Facturación */
+.form-control-sm {
+    font-size: 0.85rem;
+    padding: 0.25rem 0.5rem;
+}
+
+label.small {
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+}
+
+/* Tabla con Scroll para no colapsar la pantalla */
+.tabla-productos-wrapper {
+    max-height: 40vh; /* Máximo 40% de la altura de la pantalla */
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+}
+
+/* Banner de Cliente Activo más delgado */
+#banner-cliente-activo .alert {
+    padding: 0.5rem 1rem;
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+}
+
+/* Resalte del monto total */
+#totalBs {
+    font-size: 2rem; /* Tamaño de fuente grande */
+    font-weight: bold; /* Negrita */
+    color: #0056b3; /* Azul corporativo oscuro */
+    font-family: 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Reducir padding de la tabla de productos */
+.table-responsive .table td,
+.table-responsive .table th {
+    padding: 0.4rem; /* Reducir el padding */
+}
