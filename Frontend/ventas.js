@@ -1,64 +1,59 @@
 document.addEventListener("DOMContentLoaded", () => {
+  console.log("Sistema de Ventas Iniciado");
   // --- CAPTURA DE ELEMENTOS DEL DOM ---
   const btnBuscarCliente = document.getElementById("btnBuscarCliente");
   const btnGuardarCliente = document.getElementById("btnGuardarCliente");
   const btnLimpiarCliente = document.getElementById("btnLimpiarCliente");
-  const tipoDocumentoClienteSelect = document.getElementById("tipoDocumentoCliente");
+  const tipoDocumentoCliente = document.getElementById("tipoDocumentoCliente");
   const clienteRifCedulaInput = document.getElementById("clienteRifCedula");
   const clienteRazonSocialInput = document.getElementById("clienteRazonSocial");
   const clienteDireccionInput = document.getElementById("clienteDireccion");
   const clienteTelefonoInput = document.getElementById("clienteTelefono");
   const clienteEmailInput = document.getElementById("clienteEmail");
-  const clienteTipoContribuyenteInput = document.getElementById("clienteTipoContribuyente");
+  const tipoContribuyenteSelect = document.getElementById("tipoContribuyente");
   const procesarVentaBtn = document.getElementById("procesarVentaBtn");
   const tasaCambioInput = document.getElementById("tasaCambioInput");
   const cobrarIvaSwitch = document.getElementById('cobrarIvaSwitch');
   const ivaRow = document.getElementById("ivaRow");
+  const inputBusqueda = document.getElementById("buscarProductoInput");
+  const listaSugerencias = document.getElementById("listaSugerenciasProductos");
+
+  // --- Nuevos elementos para Flete y Referencia ---
+  const metodoPagoSelect = document.getElementById("metodoPagoSelect");
+  const campoReferencia = document.getElementById("campoReferencia");
+  const referenciaInput = document.getElementById("referenciaInput");
+  const fleteInput = document.getElementById("fleteInput");
+  const fleteVenta = document.getElementById("fleteVenta");
+  const fleteVentaBS = document.getElementById("fleteVentaBS");
 
 
   // --- VARIABLES DE ESTADO ---
   let clienteActual = null;
   const API_CLIENTES_URL = "http://localhost:3000/api/clientes";
   const API_VENTAS_URL = "http://localhost:3000/api/ventas";
-  const API_PRODUCTOS_URL = "http://localhost:3000/api/productos"; // New URL for products
-
+  const API_PRODUCTOS_URL = "http://localhost:3000/api/productos";
 
   // --- DEFINICIÓN DE FUNCIONES ---
 
   /**
-   * @description Habilita o deshabilita los campos del formulario del cliente.
-   * @param {boolean} isReadOnly - True para deshabilitar (solo lectura), false para habilitar.
+   * @description Esta función se encarga de mostrar u ocultar el campo de 'Referencia'.
+   * Lo muestra si el método de pago es algo distinto a 'Efectivo', y lo oculta si lo es.
+   * También limpia el campo si se vuelve a seleccionar 'Efectivo'.
    */
-  function toggleClientFieldsReadOnly(isReadOnly) {
-    clienteRazonSocialInput.readOnly = isReadOnly;
-    clienteDireccionInput.readOnly = isReadOnly;
-    clienteTelefonoInput.readOnly = isReadOnly;
-    clienteEmailInput.readOnly = isReadOnly;
-    clienteTipoContribuyenteInput.readOnly = isReadOnly;
-    // La cédula y tipo de doc también se deben bloquear si se encuentra un cliente.
-    clienteRifCedulaInput.readOnly = isReadOnly;
-    tipoDocumentoClienteSelect.disabled = isReadOnly;
+  function gestionarVisibilidadReferencia() {
+    if (metodoPagoSelect.value === 'Efectivo') {
+      campoReferencia.style.display = 'none';
+      referenciaInput.value = ''; // Limpiar el valor al ocultar
+    } else {
+      campoReferencia.style.display = 'block';
+    }
   }
 
-  /**
-   * @description Limpia todos los campos del formulario del cliente y resetea el estado.
-   */
-  function limpiarCamposCliente() {
-    console.log("--- Limpiando campos de cliente ---");
-    tipoDocumentoClienteSelect.value = "V";
-    clienteRifCedulaInput.value = "";
-    clienteRazonSocialInput.value = "";
-    clienteDireccionInput.value = "";
-    clienteTelefonoInput.value = "";
-    clienteEmailInput.value = "";
-    clienteTipoContribuyenteInput.value = "ORDINARIO";
-    clienteActual = null;
-    toggleClientFieldsReadOnly(false); // Habilita todos los campos.
-    clienteRifCedulaInput.focus(); // Foco en el input principal
-  }
 
   /**
-   * @description Calcula y actualiza los totales de la venta (subtotal, IVA, total) en USD y Bs.
+   * @description Calcula y actualiza todos los montos de la venta en la pantalla.
+   * Incluye subtotal, IVA, flete y los totales generales en USD y Bolívares.
+   * Se ejecuta cada vez que cambia un valor relevante (cantidad, flete, tasa, etc.).
    */
   function actualizarTotales() {
     const IVA_RATE = 0.16; // 16% de IVA
@@ -67,131 +62,295 @@ document.addEventListener("DOMContentLoaded", () => {
     const filasProductos = document.querySelectorAll("#productosVentaBody tr");
     const tasaCambio = parseFloat(tasaCambioInput.value) || 1;
     const cobrarIva = cobrarIvaSwitch.checked;
+    const fleteUSD = parseFloat(fleteInput.value) || 0;
 
     if (ivaRow) {
-      ivaRow.style.display = cobrarIva ? '' : 'none'; 
+      ivaRow.style.display = cobrarIva ? "" : "none";
     }
 
-    filasProductos.forEach(fila => {
-        const cantidadInput = fila.querySelector(".cantidad-producto");
-        // Usar dataset es más seguro y consistente
-        const precio = parseFloat(cantidadInput.dataset.precio) || 0;
-        const cantidad = parseFloat(cantidadInput.value) || 0;
-        const subtotalFila = precio * cantidad;
-        
-        // Actualizar el subtotal de la fila en el DOM
-        fila.querySelector(".subtotal-producto").textContent = subtotalFila.toFixed(2);
-        subtotalUSD += subtotalFila;
+    filasProductos.forEach((fila) => {
+      const cantidadInput = fila.querySelector(".cantidad-producto");
+      const precio = parseFloat(cantidadInput.dataset.precio) || 0;
+      const cantidad = parseFloat(cantidadInput.value) || 0;
+      const subtotalFila = precio * cantidad;
+
+      fila.querySelector(".subtotal-producto").textContent = subtotalFila.toFixed(2);
+      subtotalUSD += subtotalFila;
     });
 
-    const ivaUSD = cobrarIva ? (subtotalUSD * IVA_RATE) : 0;
-    const totalUSD = subtotalUSD + ivaUSD;
-    const totalBS = totalUSD * tasaCambio; // AQUÍ SE APLICA LA TASA
+    // 1. ¿Por qué sumamos el flete? Por ley, el flete es parte del servicio total
+    // y debe incluirse en la base sobre la cual se calcula el impuesto.
+    const baseImponibleUSD = subtotalUSD + fleteUSD;
 
-    // Inyectar los resultados en el DOM (IDs nuevos)
+    // 2. ¿Cómo se calcula el nuevo IVA? Se aplica la tasa del 16% a la suma
+    // del subtotal de productos más el costo del flete.
+    const ivaUSD = cobrarIva ? baseImponibleUSD * IVA_RATE : 0;
+
+    const totalUSD = baseImponibleUSD + ivaUSD; // El total es la base + su impuesto
+    const totalBS = totalUSD * tasaCambio;
+
+    // Inyectar los resultados en el DOM
     document.getElementById("subtotalVenta").textContent = subtotalUSD.toFixed(2);
     document.getElementById("ivaVenta").textContent = ivaUSD.toFixed(2);
-    document.getElementById("totalVenta").textContent = totalUSD.toFixed(2); // Total en USD
 
-    // Elementos para Bolívares
+    if (fleteVenta && fleteVentaBS) {
+      fleteVenta.textContent = fleteUSD.toFixed(2);
+      fleteVentaBS.textContent = (fleteUSD * tasaCambio).toFixed(2);
+    }
+
+    document.getElementById("totalVenta").textContent = totalUSD.toFixed(2);
+
+    // Montos en Bolívares
     document.getElementById("subtotalVentaBS").textContent = (subtotalUSD * tasaCambio).toFixed(2);
     document.getElementById("ivaVentaBS").textContent = (ivaUSD * tasaCambio).toFixed(2);
-    
-    const elTotalBS = document.getElementById("totalVentaBS");
-    if (elTotalBS) elTotalBS.textContent = totalBS.toLocaleString('es-VE', { 
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2 
+    document.getElementById("totalVentaBS").textContent = totalBS.toLocaleString("es-VE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   }
 
-  /**
-   * @description Busca un cliente en el backend usando su tipo de documento y RIF/Cédula.
-   */
-  async function buscarCliente() {
-    console.log("--- Iniciando búsqueda de cliente ---");
-    const tipoDocumento = tipoDocumentoClienteSelect.value;
-    const rifCedula = clienteRifCedulaInput.value.trim();
 
-    if (!rifCedula) {
-      Swal.fire("Faltan datos", "Por favor, ingresa el RIF o Cédula.", "warning");
+  /**
+   * @description Procesa la venta final. Recolecta todos los datos del cliente, 
+   * productos, y totales, y los envía al servidor para ser guardados en la base de datos.
+   */
+  async function procesarVenta() {
+    console.log("Procesando venta...");
+    if (!clienteActual || !clienteActual.id) {
+      Swal.fire(
+        "Cliente no definido",
+        "Por favor, busca o registra un cliente.",
+        "warning",
+      );
       return;
     }
 
-    try {
-      const url = `${API_CLIENTES_URL}/buscar?tipo_documento=${encodeURIComponent(tipoDocumento)}&rif_cedula=${encodeURIComponent(rifCedula)}`;
-      console.log("Buscando en URL:", url);
+    const productos = [];
+    const productosVentaBody = document.getElementById("productosVentaBody");
+    const filasProductos = productosVentaBody.querySelectorAll("tr");
 
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+    if (filasProductos.length === 0) {
+      Swal.fire(
+        "No hay productos",
+        "Por favor, añade productos a la venta.",
+        "warning",
+      );
+      return;
+    }
+
+    for (const fila of filasProductos) {
+      const id_producto = fila.getAttribute("data-producto-id");
+      const cantidadInput = fila.querySelector(".cantidad-producto");
+      const cantidad = parseFloat(cantidadInput.value) || 0;
+      const precio_unitario =
+        parseFloat(cantidadInput.getAttribute("data-precio")) || 0;
+
+      if (cantidad > 0) {
+        productos.push({
+          id_producto: id_producto,
+          cantidad: cantidad,
+          precio_unitario: precio_unitario,
+        });
+      }
+    }
+
+    if (productos.length === 0) {
+      Swal.fire(
+        "Venta vacía",
+        "No hay productos con cantidad válida.",
+        "warning",
+      );
+      return;
+    }
+
+    const tasa_bcv = parseFloat(tasaCambioInput.value) || 1;
+    const subtotal_dolares =
+      parseFloat(document.getElementById("subtotalVenta").textContent) || 0;
+    const iva_dolares =
+      parseFloat(document.getElementById("ivaVenta").textContent) || 0;
+    const total_dolares =
+      parseFloat(document.getElementById("totalVenta").textContent) || 0;
+    const total_bolivares =
+      parseFloat(
+        document
+          .getElementById("totalVentaBS")
+          .textContent.replace(/\./g, "")
+          .replace(/,/g, "."),
+      ) || 0;
+
+    // --- RECOLECCIÓN DE DATOS DE LA VENTA (PAYLOAD PLANO) ---
+    const payload = {
+      id_cliente: clienteActual.id,
+      tasa_bcv: tasa_bcv,
+      subtotal: subtotal_dolares,
+      iva: iva_dolares,
+      total: total_dolares,
+      detalles: productos, // 'detalles' es el nombre esperado en el backend
+      monto_flete: parseFloat(fleteInput.value) || 0,
+      metodo_pago: metodoPagoSelect.value || "Efectivo",
+      referencia: referenciaInput.value.trim() || null
+    };
+
+    try {
+      Swal.fire({
+        title: "Procesando Venta...",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
       });
 
-      if (response.status === 404) {
-        Swal.fire(
-          "Cliente no encontrado",
-          "Este cliente no existe. Completa los datos y presiona 'Registrar Nuevo Cliente'.",
-          "info"
-        );
-        clienteActual = null;
-        toggleClientFieldsReadOnly(false); // Habilita campos para nuevo registro.
-        clienteRifCedulaInput.readOnly = true; // Pero bloquea el RIF/Cédula que se buscó.
-        tipoDocumentoClienteSelect.disabled = true;
-        clienteRazonSocialInput.focus(); // Foco en el siguiente campo lógico
-        return;
-      }
+      const response = await fetch(`${API_VENTAS_URL}/registrar`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "El servidor no respondió correctamente.");
-      }
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.message || "Error al procesar la venta.");
 
-      const clienteEncontrado = await response.json();
-      console.log("Cliente encontrado:", clienteEncontrado);
-
-      clienteActual = clienteEncontrado;
-      clienteRazonSocialInput.value = clienteEncontrado.razon_social || "";
-      clienteDireccionInput.value = clienteEncontrado.direccion || "";
-      clienteTelefonoInput.value = clienteEncontrado.telefono || "";
-      clienteEmailInput.value = clienteEncontrado.email || "";
-      clienteTipoContribuyenteInput.value = clienteEncontrado.tipo_contribuyente || "ORDINARIO";
-      
-      toggleClientFieldsReadOnly(true); // Bloquea todos los campos de un cliente encontrado.
+      Swal.fire({
+        title: "¡Venta registrada!",
+        text: "¿Deseas imprimir la Nota de Entrega?",
+        icon: "success",
+        showCancelButton: true,
+        confirmButtonText: "Sí, imprimir",
+        cancelButtonText: "No, gracias",
+      }).then((action) => {
+        if (action.isConfirmed) {
+          const ventaId = result.id || result.id_venta || result.insertId;
+          window.open(
+            `http://localhost:3000/api/ventas/reporte/${ventaId}`,
+            "_blank",
+          );
+        }
+        limpiarCamposCliente();
+        productosVentaBody.innerHTML = "";
+        fleteInput.value = "0"; // Resetear flete
+        metodoPagoSelect.value = "Efectivo"; // Resetear método de pago
+        gestionarVisibilidadReferencia(); // Ocultar referencia
+        actualizarTotales();
+      });
     } catch (error) {
-      console.error("Error al buscar cliente:", error);
-      Swal.fire("Error de Conexión", `No se pudo buscar el cliente. Detalle: ${error.message}`, "error");
+      console.error("Error al procesar venta:", error);
+      Swal.fire(
+        "Error",
+        `No se pudo procesar la venta. Detalle: ${error.message}`,
+        "error",
+      );
     }
   }
 
-  /**
-   * @description Registra un nuevo cliente en el backend.
-   */
-  async function guardarCliente() {
-    console.log("--- Iniciando guardado de cliente ---");
+
+  // --- RESTO DE FUNCIONES (SIN CAMBIOS IMPORTANTES) ---
+  function toggleClientFieldsReadOnly(isReadOnly) {
+    clienteRazonSocialInput.readOnly = isReadOnly;
+    clienteDireccionInput.readOnly = isReadOnly;
+    clienteTelefonoInput.readOnly = isReadOnly;
+    clienteEmailInput.readOnly = isReadOnly;
+    tipoContribuyenteSelect.disabled = isReadOnly;
+    clienteRifCedulaInput.readOnly = isReadOnly;
+    tipoDocumentoCliente.disabled = isReadOnly;
+  }
+
+  function limpiarCamposCliente() {
+    tipoDocumentoCliente.value = "V";
+    clienteRifCedulaInput.value = "";
+    clienteRazonSocialInput.value = "";
+    clienteDireccionInput.value = "";
+    clienteTelefonoInput.value = "";
+    clienteEmailInput.value = "";
+    tipoContribuyenteSelect.value = "Ordinario";
+    clienteActual = null;
+    toggleClientFieldsReadOnly(false);
+    clienteRifCedulaInput.focus();
+  }
+
+  const buscarCliente = async () => {
+    const tipoDoc = tipoDocumentoCliente.value;
+    const numeroDoc = clienteRifCedulaInput.value.trim();
+    if (!numeroDoc) {
+      Swal.fire("Faltan datos", "Por favor, ingresa el RIF o Cédula.", "warning");
+      return;
+    }
+    try {
+      const url = `${API_CLIENTES_URL}/buscar?rif_cedula=${encodeURIComponent(numeroDoc)}&tipo_documento=${encodeURIComponent(tipoDoc)}`;
+      btnBuscarCliente.disabled = true;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+      });
+      btnBuscarCliente.disabled = false;
+      if (response.status === 404) {
+        const result = await Swal.fire({
+          title: "Cliente no encontrado",
+          text: "¿Deseas registrar a este cliente ahora?",
+          icon: "info",
+          showCancelButton: true,
+          confirmButtonText: "Sí, habilitar registro",
+          cancelButtonText: "No, corregir número",
+        });
+        if (result.isConfirmed) {
+          clienteActual = null;
+          toggleClientFieldsReadOnly(false);
+          clienteRifCedulaInput.readOnly = false;
+          tipoDocumentoCliente.disabled = false;
+          clienteRazonSocialInput.focus();
+        } else {
+          clienteRifCedulaInput.focus();
+        }
+        return;
+      }
+      if (!response.ok) throw new Error("Error en la respuesta del servidor");
+      const clienteEncontrado = await response.json();
+      clienteActual = clienteEncontrado;
+      clienteRazonSocialInput.value = clienteEncontrado.razon_social || "";
+      clienteDireccionInput.value = clienteEncontrado.direccion_fiscal || "";
+      clienteTelefonoInput.value = clienteEncontrado.telefono || "";
+      clienteEmailInput.value = clienteEncontrado.email || "";
+      tipoContribuyenteSelect.value = clienteEncontrado.tipo_contribuyente || "Ordinario";
+      if (clienteEncontrado.tipo_documento) {
+        tipoDocumentoCliente.value = clienteEncontrado.tipo_documento;
+      }
+      toggleClientFieldsReadOnly(true);
+      Swal.fire({
+        icon: "success",
+        title: "Cliente Encontrado",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+    } catch (error) {
+      console.error("Error buscando cliente:", error);
+      btnBuscarCliente.disabled = false;
+      Swal.fire("Error", "No se pudo conectar con el servidor.", "error");
+    }
+  };
+
+  async function registrarCliente() {
     if (clienteActual && clienteActual.id) {
       Swal.fire("Información", "Este cliente ya está registrado.", "info");
       return;
     }
-
     const nuevoClienteData = {
-      tipoDocumento: tipoDocumentoClienteSelect.value,
-      rifCedula: clienteRifCedulaInput.value.trim(),
-      razonSocial: clienteRazonSocialInput.value.trim(),
-      direccion: clienteDireccionInput.value.trim(),
+      tipo_documento: tipoDocumentoCliente.value,
+      rif_cedula: clienteRifCedulaInput.value.trim(),
+      razon_social: clienteRazonSocialInput.value.trim(),
+      direccion_fiscal: clienteDireccionInput.value.trim(),
       telefono: clienteTelefonoInput.value.trim(),
       email: clienteEmailInput.value.trim(),
-      tipoContribuyente: clienteTipoContribuyenteInput.value.trim() || 'ORDINARIO'
+      tipo_contribuyente: tipoContribuyenteSelect.value,
     };
-
-    if (!nuevoClienteData.rifCedula || !nuevoClienteData.razonSocial) {
-      Swal.fire("Datos incompletos", "La Cédula/RIF y la Razón Social son obligatorios.", "warning");
+    if (!nuevoClienteData.rif_cedula || !nuevoClienteData.razon_social) {
+      Swal.fire("Datos incompletos", "Cédula/RIF y Razón Social son obligatorios.", "warning");
       return;
     }
-    
     try {
-      console.log("Enviando datos de nuevo cliente:", nuevoClienteData);
       const url = `${API_CLIENTES_URL}/registrar`;
-
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -200,351 +359,221 @@ document.addEventListener("DOMContentLoaded", () => {
         },
         body: JSON.stringify(nuevoClienteData),
       });
-
-      const clienteCreado = await response.json();
       if (!response.ok) {
-        // Si el error viene con un array de `errors`, lo formateamos.
-        if (clienteCreado.errors) {
-            const errorMessages = clienteCreado.errors.map(err => err.msg).join('\n');
-            throw new Error(errorMessages);
-        }
-        throw new Error(clienteCreado.message || "Error desconocido al registrar.");
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `Error: ${response.status}`);
       }
-      
-      console.log("Cliente nuevo registrado con éxito:", clienteCreado);
-      clienteActual = clienteCreado.cliente; // El backend devuelve un objeto { cliente: {...} }
-      
-      // Actualizamos los campos con los datos devueltos por el API (limpios)
-      tipoDocumentoClienteSelect.value = clienteActual.tipo_documento;
-      clienteRifCedulaInput.value = clienteActual.rif_cedula;
-      
-      toggleClientFieldsReadOnly(true); // Bloqueamos los campos tras el guardado exitoso.
-
-      Swal.fire("¡Éxito!", "Cliente registrado correctamente.", "success");
+      const clienteCreado = await response.json();
+      if (clienteCreado && clienteCreado.id) {
+        clienteActual = clienteCreado;
+        toggleClientFieldsReadOnly(true);
+        Swal.fire("¡Éxito!", "Cliente registrado correctamente.", "success");
+      } else {
+        throw new Error("Respuesta inválida del servidor.");
+      }
     } catch (error) {
-      console.error("Error al guardar el cliente:", error);
-      Swal.fire("Error", `No se pudo guardar el cliente. Detalle: ${error.message}`, "error");
+      Swal.fire("Error al registrar", `No se pudo guardar. Detalle: ${error.message}`, "error");
     }
   }
 
-  /**
-   * @description Procesa la venta, recolectando datos y enviándolos al backend.
-   */
-  async function procesarVenta() {
-    if (!clienteActual || !clienteActual.id) {
-      Swal.fire("Cliente no definido", "Por favor, busca o registra un cliente antes de procesar la venta.", "warning");
+  function agregarProductoATabla(producto) {
+    if (producto.stock <= 0) {
+      Swal.fire(
+        "Sin Existencia",
+        "El artículo seleccionado no tiene existencia en inventario.",
+        "warning",
+      );
       return;
     }
 
-    // Recolectar productos de la tabla para el 'detalle' del backend
-    const detalleProductos = [];
-    const productosVentaBody = document.getElementById('productosVentaBody');
-    if (productosVentaBody) {
-        const filasProductos = productosVentaBody.querySelectorAll('tr');
-        if (filasProductos.length === 0) {
-            Swal.fire("No hay productos", "Por favor, añade productos a la venta.", "warning");
-            return;
-        }
-        for (const fila of filasProductos) {
-            const productoId = fila.getAttribute('data-producto-id');
-            const cantidadInput = fila.querySelector('.cantidad-producto');
-            const cantidad = parseFloat(cantidadInput ? cantidadInput.value : 0) || 0;
-            const precioUnitario = parseFloat(cantidadInput.getAttribute('data-precio')) || 0; // Precio unitario original del producto
-
-            if (cantidad > 0) {
-                detalleProductos.push({
-                    productoId: productoId, // Backend espera 'productoId'
-                    cantidad: cantidad,
-                    precioUnitario: precioUnitario // Backend espera 'precioUnitario'
-                });
-            } else {
-                 Swal.fire("Cantidad Inválida", "La cantidad de un producto no puede ser cero.", "warning");
-                 return;
-            }
-        }
-    }
-
-    if (detalleProductos.length === 0) {
-        Swal.fire("No hay productos", "Por favor, añade productos a la venta antes de procesar.", "warning");
-        return;
-    }
-
-    // Recolectar datos de la venta para 'datosVenta' del backend
-    const tasaCambio = parseFloat(tasaCambioInput.value) || 1;
-    const subtotalUSD = parseFloat(document.getElementById('subtotalVenta').textContent) || 0;
-    const ivaUSD = parseFloat(document.getElementById('ivaVenta').textContent) || 0;
-    const totalUSD = parseFloat(document.getElementById('totalVenta').textContent) || 0;
-    // totalBS se obtiene del DOM y debe ser parseado correctamente si usa toLocaleString
-    const totalBS = parseFloat(document.getElementById('totalVentaBS').textContent.replace('.', '').replace(',', '.')) || 0; // Handle locale string
-
-
-    const datosVenta = {
-        clienteId: clienteActual.id, // Backend espera 'clienteId'
-        tasaBcv: tasaCambio, // Backend espera 'tasaBcv'
-        subtotal: subtotalUSD, // Backend espera subtotal en USD
-        impuesto: ivaUSD, // Backend espera impuesto en USD
-        total: totalUSD, // Backend espera total en USD
-        // metodoPago: 'Efectivo', // Asumido, el backend usa 'metodo_pago'
-        // permitirStockNegativo: false // Asumido, el backend usa 'permitirStockNegativo'
-    };
-    
-    // Combina los datos en la estructura esperada por el backend
-    const payload = {
-        datosVenta: datosVenta,
-        detalle: detalleProductos,
-    };
-
-    try {
-        Swal.fire({
-            title: 'Procesando Venta...',
-            text: 'Por favor, espera.',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-
-        const response = await fetch(`${API_VENTAS_URL}/registrar`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-            body: JSON.stringify(payload), // Send the combined payload
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            throw new Error(result.message || "Error al procesar la venta.");
-        }
-
-        Swal.fire("¡Venta Exitosa!", "La venta ha sido registrada correctamente.", "success");
-        // Limpiar la interfaz después de una venta exitosa
-        limpiarCamposCliente();
-        const productosVentaBody = document.getElementById('productosVentaBody');
-        if(productosVentaBody) productosVentaBody.innerHTML = ''; // Limpiar productos de la tabla
-        actualizarTotales(); // Recalcular para que todo quede en 0
-        // Podrías redirigir a una página de detalle de venta o imprimir factura
-    } catch (error) {
-        console.error("Error al procesar venta:", error);
-        Swal.fire("Error", `No se pudo procesar la venta. Detalle: ${error.message}`, "error");
-    }
-  }
-
-  /**
-   * @description Añade un producto a la tabla de la venta.
-   * @param {object} producto - El producto a añadir, con id, codigo, nombre, precio_venta, stock.
-   */
-  function agregarProductoATabla(producto) {
-    const tablaBody = document.getElementById('productosVentaBody');
-    if (!tablaBody) {
-        console.error('El cuerpo de la tabla de productos no se encontró.');
-        return;
-    }
-
-    // Verificar si el producto ya está en la tabla
+    const tablaBody = document.getElementById("productosVentaBody");
     const filaExistente = tablaBody.querySelector(`tr[data-producto-id="${producto.id}"]`);
     if (filaExistente) {
-        // Si existe, incrementar la cantidad
-        const cantidadInput = filaExistente.querySelector('.cantidad-producto');
-        const nuevaCantidad = (parseFloat(cantidadInput.value) || 0) + 1;
-        if (nuevaCantidad <= producto.stock) {
-            cantidadInput.value = nuevaCantidad;
-            actualizarTotales(); // Actualizar totales después de cambiar la cantidad
-        } else {
-            Swal.fire('Stock Insuficiente', `Solo hay ${producto.stock} unidades de ${producto.nombre} disponibles.`, 'warning');
-        }
-        return;
+      const cantidadInput = filaExistente.querySelector(".cantidad-producto");
+      const nuevaCantidad = (parseFloat(cantidadInput.value) || 0) + 1;
+      if (nuevaCantidad <= producto.stock) {
+        cantidadInput.value = nuevaCantidad;
+        actualizarTotales();
+      } else {
+        Swal.fire("Stock Insuficiente", `Solo hay ${producto.stock} unidades.`, "warning");
+      }
+      return;
     }
-
-
-    // Crear la fila y las celdas
-    const fila = document.createElement('tr');
-    fila.setAttribute('data-producto-id', producto.id);
-
-    // Guardar el precio de venta en un atributo de datos en el input de cantidad
-    // para poder recuperarlo fácilmente en actualizarTotales
-    const initialSubtotal = (1 * producto.precio_venta).toFixed(2);
-
+    const fila = document.createElement("tr");
+    fila.setAttribute("data-producto-id", producto.id);
     fila.innerHTML = `
         <td>${producto.codigo}</td>
         <td>${producto.nombre}</td>
-        <td>${parseFloat(producto.precio_venta).toFixed(2)}</td>
+        <td class="precio-producto-celda" style="cursor: pointer;" title="Doble clic para editar"><span>${parseFloat(producto.precio_venta).toFixed(2)}</span></td>
         <td><input type="number" class="form-control form-control-sm cantidad-producto" value="1" min="1" max="${producto.stock}" data-precio="${producto.precio_venta}" data-stock="${producto.stock}" style="width: 70px;"></td>
-        <td class="subtotal-producto">${initialSubtotal}</td>
+        <td class="subtotal-producto">${parseFloat(producto.precio_venta).toFixed(2)}</td>
         <td><button class="btn btn-danger btn-sm eliminar-producto"><i class="fas fa-trash"></i></button></td>
     `;
-
     tablaBody.appendChild(fila);
 
-    // Añadir event listeners a los nuevos elementos de la fila
-    const cantidadInput = fila.querySelector('.cantidad-producto');
-    if (cantidadInput) {
-        cantidadInput.addEventListener('input', () => {
-            const cantidadActual = parseFloat(cantidadInput.value);
-            const maxStock = parseFloat(cantidadInput.getAttribute('data-stock'));
+    const cantidadInput = fila.querySelector(".cantidad-producto");
+    const precioCelda = fila.querySelector(".precio-producto-celda");
 
-            if (cantidadActual > maxStock) {
-                Swal.fire('Stock Insuficiente', `Solo hay ${maxStock} unidades de ${producto.nombre} disponibles.`, 'warning');
-                cantidadInput.value = maxStock; // Restaurar al máximo stock
-            } else if (cantidadActual < 1) {
-                cantidadInput.value = 1; // Mínimo 1
+    precioCelda.addEventListener('dblclick', () => {
+        const span = precioCelda.querySelector('span');
+        const originalPrice = parseFloat(span.textContent);
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'form-control form-control-sm';
+        input.value = originalPrice.toFixed(2);
+        input.style.width = '100px';
+
+        span.style.display = 'none';
+        precioCelda.appendChild(input);
+        input.focus();
+        input.select();
+
+        const finalizarEdicion = async (guardar) => {
+            const nuevoPrecio = parseFloat(input.value);
+
+            if (guardar && nuevoPrecio !== originalPrice && !isNaN(nuevoPrecio) && nuevoPrecio > 0) {
+                const confirmacion = await Swal.fire({
+                    title: '¿Cambiar el precio?',
+                    text: `El precio de "${producto.nombre}" cambiará de ${originalPrice.toFixed(2)} a ${nuevoPrecio.toFixed(2)}. ¿Confirmas?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, cambiar',
+                    cancelButtonText: 'No, cancelar'
+                });
+
+                if (confirmacion.isConfirmed) {
+                    span.textContent = nuevoPrecio.toFixed(2);
+                    cantidadInput.dataset.precio = nuevoPrecio.toFixed(2);
+                    actualizarTotales();
+                }
             }
-            actualizarTotales();
-        });
-        cantidadInput.addEventListener('change', actualizarTotales); // Trigger on change as well
-    }
+            
+            input.remove();
+            span.style.display = 'inline';
+        };
 
-    const eliminarBtn = fila.querySelector('.eliminar-producto');
-    if (eliminarBtn) {
-        eliminarBtn.addEventListener('click', () => {
-            fila.remove();
-            actualizarTotales();
-        });
-    }
-
-    actualizarTotales(); // Recalcular totales después de añadir el producto
-  }
-
-  /**
-   * @description Se ejecuta al hacer clic en un producto de la lista de sugerencias.
-   * @param {object} producto - El objeto del producto seleccionado.
-   */
-  function seleccionarProducto(producto) {
-      console.log("Producto seleccionado:", producto);
-      agregarProductoATabla(producto);
-
-      // Limpiamos el buscador y las sugerencias
-      const inputBusqueda = document.getElementById("buscarProductoInput");
-      const listaSugerencias = document.getElementById("listaSugerenciasProductos");
-      inputBusqueda.value = "";
-      if (listaSugerencias) {
-        listaSugerencias.innerHTML = "";
-        listaSugerencias.style.display = "none";
-      }
-      
-      // Devolvemos el foco al buscador
-      inputBusqueda.focus();
-  }
-
-  // --- LÓGICA DE BÚSQUEDA PREDICTIVA DE PRODUCTOS ---
-  const inputBusqueda = document.getElementById("buscarProductoInput");
-  const listaSugerencias = document.getElementById("listaSugerenciasProductos");
-
-  /**
-   * @description Muestra las sugerencias de productos debajo del input de búsqueda.
-   * @param {Array<object>} productos - Un array de objetos de producto.
-   */
-  function mostrarSugerencias(productos) {
-    if (!listaSugerencias) return;
-
-    listaSugerencias.innerHTML = '';
-    if (productos.length === 0) {
-        listaSugerencias.style.display = 'none';
-        return;
-    }
-
-    productos.forEach(producto => {
-        const item = document.createElement('div');
-        item.classList.add('sugerencia-item');
-        item.textContent = `${producto.codigo} - ${producto.nombre} (Stock: ${producto.stock})`;
-        
-        // Usamos mousedown para que se dispare antes que el 'blur' del input
-        item.addEventListener('mousedown', () => {
-            seleccionarProducto(producto);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur(); // Dispara el evento blur para guardar
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                input.value = originalPrice.toFixed(2); // Restaura valor original
+                input.blur(); // Dispara el evento blur sin guardar
+            }
         });
 
-        listaSugerencias.appendChild(item);
+        input.addEventListener('blur', () => finalizarEdicion(true));
     });
 
-    listaSugerencias.style.display = 'block';
+
+    cantidadInput.addEventListener("input", () => {
+      const cantidadActual = parseFloat(cantidadInput.value);
+      const maxStock = parseFloat(cantidadInput.getAttribute("data-stock"));
+      if (cantidadActual > maxStock) {
+        Swal.fire("Stock Insuficiente", `Solo hay ${maxStock} unidades.`, "warning");
+        cantidadInput.value = maxStock;
+      }
+      actualizarTotales();
+    });
+    fila.querySelector(".eliminar-producto").addEventListener("click", () => {
+      fila.remove();
+      actualizarTotales();
+    });
+    actualizarTotales();
+  }
+
+  function seleccionarProducto(producto) {
+    agregarProductoATabla(producto);
+    inputBusqueda.value = "";
+    listaSugerencias.innerHTML = "";
+    listaSugerencias.style.display = "none";
+    inputBusqueda.focus();
+  }
+
+  function mostrarSugerencias(productos) {
+    if (!listaSugerencias) return;
+    listaSugerencias.innerHTML = "";
+    if (productos.length === 0) {
+      listaSugerencias.style.display = "none";
+      return;
+    }
+    productos.forEach((producto) => {
+      const item = document.createElement("div");
+      item.classList.add("sugerencia-item");
+      item.textContent = `${producto.codigo} - ${producto.nombre} (Stock: ${producto.stock})`;
+      
+      if (producto.stock <= 0) {
+        item.classList.add("disabled-suggestion");
+        item.title = "Sin existencia en inventario";
+      } else {
+        item.addEventListener("mousedown", () => seleccionarProducto(producto));
+      }
+      listaSugerencias.appendChild(item);
+    });
+    listaSugerencias.style.display = "block";
   }
 
   // --- ASIGNACIÓN DE EVENTOS ---
-  if (btnBuscarCliente) {
-    btnBuscarCliente.addEventListener("click", buscarCliente);
-  }
-  
-  // Nueva funcionalidad: Buscar con la tecla 'Enter'
+  if (btnBuscarCliente) btnBuscarCliente.addEventListener("click", buscarCliente);
   if (clienteRifCedulaInput) {
-    clienteRifCedulaInput.addEventListener("keydown", (event) => {
-        if (event.key === 'Enter') {
-            event.preventDefault(); // Evita que el form se envíe si lo hubiera
-            buscarCliente();
-        }
+    clienteRifCedulaInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        buscarCliente();
+      }
     });
   }
-
-  // Event Listener para el botón de guardar cliente.
-  if (btnGuardarCliente) {
-    btnGuardarCliente.addEventListener("click", guardarCliente);
-  }
-
-  if (btnLimpiarCliente) {
-    btnLimpiarCliente.addEventListener("click", limpiarCamposCliente);
-  }
-  
-  if (procesarVentaBtn) {
-    procesarVentaBtn.addEventListener('click', procesarVenta);
-  }
+  if (btnGuardarCliente) btnGuardarCliente.addEventListener("click", registrarCliente);
+  if (btnLimpiarCliente) btnLimpiarCliente.addEventListener("click", limpiarCamposCliente);
+  if (procesarVentaBtn) procesarVentaBtn.addEventListener("click", procesarVenta);
 
   if (inputBusqueda) {
     inputBusqueda.addEventListener("input", async (e) => {
-        const texto = e.target.value;
-
-        if (texto.length < 2) {
-            if (listaSugerencias) {
-              listaSugerencias.innerHTML = '';
-              listaSugerencias.style.display = 'none';
-            }
-            return;
-        }
-
-        try {
-            const resp = await fetch(`${API_PRODUCTOS_URL}/buscar?termino=${texto}`, { // Corrected URL for products
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-
-            if (!resp.ok) throw new Error('Error en la respuesta del servidor');
-
-            const productos = await resp.json();
-            mostrarSugerencias(productos);
-        } catch (err) {
-            console.error("Error buscando productos:", err);
-            if(listaSugerencias) {
-              listaSugerencias.innerHTML = '<div class="sugerencia-item no-results">Error al buscar...</div>';
-              listaSugerencias.style.display = 'block';
-            }
-        }
+      const texto = e.target.value;
+      if (texto.length < 2) {
+        if (listaSugerencias) listaSugerencias.style.display = "none";
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_PRODUCTOS_URL}/buscar?termino=${texto}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`
+          },
+        });
+        if (!resp.ok) throw new Error("Error en la respuesta del servidor");
+        const productos = await resp.json();
+        mostrarSugerencias(productos);
+      } catch (err) {
+        console.error("Error buscando productos:", err);
+      }
     });
-
-    // Ocultar la lista si el input pierde el foco
-    inputBusqueda.addEventListener('blur', () => {
-        // Damos un pequeño delay para permitir que el evento 'mousedown' se registre
-        setTimeout(() => {
-            if (listaSugerencias) {
-                listaSugerencias.style.display = 'none';
-            }
-        }, 150);
+    inputBusqueda.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (listaSugerencias) listaSugerencias.style.display = "none";
+      }, 150);
     });
   }
 
   // --- Inicialización y Eventos Adicionales ---
-  // Persistencia de la Tasa de Cambio
   if (tasaCambioInput) {
     const tasaGuardada = localStorage.getItem("ultimaTasaCambio");
-    tasaCambioInput.value = tasaGuardada ? tasaGuardada : "1.00";
-
+    tasaCambioInput.value = tasaGuardada || "1.00";
     tasaCambioInput.addEventListener("input", (e) => {
       localStorage.setItem("ultimaTasaCambio", e.target.value);
       actualizarTotales();
     });
-    // También recalculamos si el switch de IVA cambia
-    cobrarIvaSwitch.addEventListener('change', actualizarTotales);
   }
+  if (cobrarIvaSwitch) cobrarIvaSwitch.addEventListener("change", actualizarTotales);
 
-  // Realizar un cálculo inicial de totales al cargar la página
+  // --- Nuevos listeners para Flete y Referencia ---
+  if (fleteInput) fleteInput.addEventListener('input', actualizarTotales);
+  if (metodoPagoSelect) metodoPagoSelect.addEventListener('change', gestionarVisibilidadReferencia);
+
+
+  // --- Ejecuciones Iniciales ---
   actualizarTotales();
+  gestionarVisibilidadReferencia(); // Para establecer el estado inicial correcto
 
+  console.log("✅ Conexión exitosa: Listeners de Ventas activos");
 });

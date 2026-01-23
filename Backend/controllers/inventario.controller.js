@@ -1,5 +1,6 @@
 const pool = require("../db");
 const bcrypt = require("bcrypt");
+const { actualizarStockDeposito } = require("../services/inventario.service");
 
 // 1. OBTENER PRODUCTO POR ID
 const obtenerProductoPorId = async (req, res, next) => {
@@ -32,6 +33,7 @@ const obtenerProductoPorId = async (req, res, next) => {
   }
 };
 
+
 // 2. OBTENER TODOS LOS PRODUCTOS
 const obtenerTodosLosProductos = async (req, res, next) => {
   let connection;
@@ -58,6 +60,223 @@ const obtenerTodosLosProductos = async (req, res, next) => {
     next(error);
   } finally {
     if (connection) connection.release();
+  }
+};
+
+/**
+ * Escenario A: Venta Estándar
+ *
+ * Esta función maneja el proceso de registrar una venta, verificando el stock disponible
+ * en el depósito principal antes de restar la cantidad. Utiliza la función maestra
+ * `actualizarStockDeposito` dentro de una transacción explícita gestionada por este controlador
+ * para asegurar la atomicidad de la operación.
+ *
+ * @param {object} req - Objeto de solicitud de Express.
+ * @param {object} res - Objeto de respuesta de Express.
+ * @param {function} next - Función para pasar el control al siguiente middleware.
+ */
+const realizarVenta = async (req, res, next) => {
+  const { id_producto, cantidad_venta, id_usuario } = req.body;
+
+  if (!id_producto || !cantidad_venta || cantidad_venta <= 0 || !id_usuario) {
+    return res.status(400).json({
+      success: false,
+      error: "Datos de venta incompletos o inválidos. Asegúrate de proporcionar id_producto, cantidad_venta y id_usuario.",
+    });
+  }
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction(); // Iniciar transacción a nivel de controlador
+
+    // Validar stock actual en el depósito principal (ID 1)
+    // Usamos FOR UPDATE para bloquear la fila y evitar condiciones de carrera (Race Conditions)
+    // si múltiples ventas intentan acceder al mismo producto simultáneamente.
+    const [rows] = await connection.execute(
+      "SELECT stock_actual FROM stock_depositos WHERE id_producto = ? AND id_deposito = 1 FOR UPDATE",
+      [id_producto]
+    );
+
+    const stockActual = rows.length > 0 ? rows[0].stock_actual : 0;
+
+    if (stockActual < cantidad_venta) {
+      await connection.rollback(); // Rollback si no hay stock suficiente
+      return res.status(400).json({
+        success: false,
+        error: `Stock insuficiente para el producto ${id_producto}. Stock disponible: ${stockActual}.`,
+      });
+    }
+
+    // Llamar a la función maestra de servicio para actualizar el stock.
+    // Se le pasa la conexión para que opere dentro de la transacción existente.
+    await actualizarStockDeposito({
+      id_producto,
+      id_deposito: 1, // Depósito Principal
+      cantidad: -cantidad_venta, // Cantidad negativa para salida
+      tipo_movimiento: "VENTA",
+      id_usuario,
+      connection,
+    });
+
+    await connection.commit(); // Confirmar la transacción si todo fue exitoso
+    console.log(`Venta exitosa para producto ${id_producto}.`);
+    res.status(200).json({ success: true, message: "Venta registrada y stock actualizado." });
+  } catch (error) {
+    if (connection) {
+      await connection.rollback(); // Revertir la transacción en caso de cualquier error
+      console.error(`Transacción de venta revertida debido a un error: ${error.message}`);
+    }
+    next(error); // Pasar el error al siguiente middleware (manejador de errores global)
+  } finally {
+    if (connection) {
+      connection.release(); // Siempre liberar la conexión
+    }
+  }
+};
+
+/**
+ * Escenario B: Devoluciones Inteligentes
+ *
+ * Permite procesar devoluciones de productos, dirigiéndolos al depósito principal
+ * si están en buen estado o al depósito de productos dañados si presentan defectos.
+ * Cada operación de devolución se maneja como una transacción independiente a través
+ * de `actualizarStockDeposito`.
+ *
+ * @param {object} req - Objeto de solicitud de Express.
+ * @param {object} res - Objeto de respuesta de Express.
+ * @param {function} next - Función para pasar el control al siguiente middleware.
+ */
+const procesarDevolucionInteligente = async (req, res, next) => {
+  const { id_producto, cantidad, estado_producto, id_usuario } = req.body; // estado_producto: 'bueno' o 'danado'
+
+  if (!id_producto || !cantidad || cantidad <= 0 || !estado_producto || !id_usuario) {
+    return res.status(400).json({
+      success: false,
+      error: "Datos de devolución incompletos o inválidos. Debe ser 'bueno' o 'danado'.",
+    });
+  }
+
+  let id_deposito_destino;
+  let tipo_movimiento;
+
+  if (estado_producto === "bueno") {
+    id_deposito_destino = 1; // Depósito Principal
+    tipo_movimiento = "DEVOLUCION_BUEN_ESTADO";
+  } else if (estado_producto === "danado") {
+    id_deposito_destino = 2; // Depósito de Dañados
+    tipo_movimiento = "DEVOLUCION_DAÑADO";
+  } else {
+    return res.status(400).json({
+      success: false,
+      error: "Estado del producto inválido. Debe ser 'bueno' o 'danado'.",
+    });
+  }
+
+  try {
+    // La función maestra gestionará su propia transacción para esta operación simple.
+    await actualizarStockDeposito({
+      id_producto,
+      id_deposito: id_deposito_destino,
+      cantidad: cantidad, // Cantidad positiva para entrada
+      tipo_movimiento,
+      id_usuario,
+      // No se pasa conexión, por lo que actualizarStockDeposito manejará su propia transacción
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Devolución de producto ${id_producto} (${estado_producto}) procesada correctamente.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Escenario C: Inmovilización / Cuarentena
+ *
+ * Esta función permite mover una cantidad específica de un producto del depósito
+ * principal a un depósito de inmovilización (cuarentena). Esta operación es crítica
+ * y debe ser atómica (ambos movimientos deben ocurrir o ninguno). Por ello,
+ * se gestiona una única transacción a nivel de controlador que engloba las dos llamadas
+ * a `actualizarStockDeposito`.
+ *
+ * @param {object} req - Objeto de solicitud de Express.
+ * @param {object} res - Objeto de respuesta de Express.
+ * @param {function} next - Función para pasar el control al siguiente middleware.
+ */
+const moverAInmovilizado = async (req, res, next) => {
+  const { id_producto, cantidad, id_usuario } = req.body;
+  const DEPOSITO_PRINCIPAL = 1;
+  const DEPOSITO_INMOVILIZADO = 3;
+
+  if (!id_producto || !cantidad || cantidad <= 0 || !id_usuario) {
+    return res.status(400).json({
+      success: false,
+      error: "Datos de inmovilización incompletos o inválidos. Asegúrate de proporcionar id_producto, cantidad y id_usuario.",
+    });
+  }
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction(); // Iniciar una única transacción para ambos movimientos
+
+    // 1. Restar del Depósito Principal (ID 1)
+    // Es crucial validar que hay suficiente stock antes de intentar moverlo.
+    const [rows] = await connection.execute(
+      "SELECT stock_actual FROM stock_depositos WHERE id_producto = ? AND id_deposito = ? FOR UPDATE",
+      [id_producto, DEPOSITO_PRINCIPAL]
+    );
+
+    const stockActualPrincipal = rows.length > 0 ? rows[0].stock_actual : 0;
+
+    if (stockActualPrincipal < cantidad) {
+      await connection.rollback(); // Rollback si no hay stock suficiente en el origen
+      return res.status(400).json({
+        success: false,
+        error: `Stock insuficiente en el depósito principal para inmovilizar ${cantidad} unidades del producto ${id_producto}. Stock disponible: ${stockActualPrincipal}.`,
+      });
+    }
+
+    await actualizarStockDeposito({
+      id_producto,
+      id_deposito: DEPOSITO_PRINCIPAL,
+      cantidad: -cantidad, // Salida del depósito principal
+      tipo_movimiento: "INMOVILIZACION_SALIDA",
+      id_usuario,
+      connection, // Pasar la conexión para que use la transacción existente
+    });
+
+    // 2. Sumar al Depósito Inmovilizado (ID 3)
+    await actualizarStockDeposito({
+      id_producto,
+      id_deposito: DEPOSITO_INMOVILIZADO,
+      cantidad: cantidad, // Entrada al depósito inmovilizado
+      tipo_movimiento: "INMOVILIZACION_ENTRADA",
+      id_usuario,
+      connection, // Pasar la conexión para que use la transacción existente
+    });
+
+    await connection.commit(); // Confirmar ambos movimientos
+    console.log(`Producto ${id_producto} movido a inmovilizado.`);
+    res.status(200).json({
+      success: true,
+      message: `Se han movido ${cantidad} unidades del producto ${id_producto} al depósito de inmovilización.`,
+    });
+  } catch (error) {
+    if (connection) {
+      await connection.rollback(); // Revertir ambos movimientos si algo falla
+      console.error(
+        `Transacción de inmovilización revertida debido a un error: ${error.message}`
+      );
+    }
+    next(error);
+  } finally {
+    if (connection) {
+      connection.release(); // Liberar la conexión
+    }
   }
 };
 
@@ -810,49 +1029,77 @@ async function eliminarProducto(id) {
   }
 }
 async function procesarDevolucion(datosDevolucion) {
-  const { id_venta, id_producto, cantidad, motivo, usuario_id } =
+  // Capturamos los datos necesarios del cuerpo de la petición.
+  // Es crucial obtener `id_deposito_destino` directamente desde `req.body`
+  // para que el sistema respete la elección del usuario (Depósito Principal, Dañados, etc.).
+  const { id_venta, id_producto, cantidad, motivo, usuario_id, id_deposito_destino } =
     datosDevolucion;
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
-    // 1. Verificar que la venta y el producto existan en el detalle
+    // 3. Validar la Transacción:
+    //    Es vital validar los IDs de depósitos que vienen de fuentes externas para prevenir
+    //    intentos de manipulación o errores inesperados. Solo permitimos depósitos válidos.
+    if (![1, 2].includes(id_deposito_destino)) {
+      throw new Error("ID de depósito de destino inválido para la devolución. Debe ser 1 (Principal) o 2 (Dañados).");
+    }
+
+    // 1. Verificar que la venta y el producto existan en el detalle de la venta.
     const [detalle] = await connection.execute(
       "SELECT cantidad, precio_unitario FROM detalle_ventas WHERE id_venta = ? AND id_producto = ?",
       [id_venta, id_producto]
     );
 
     if (detalle.length === 0) {
-      throw new Error("El producto no pertenece a la venta especificada.");
+      throw new Error("El producto no pertenece a la venta especificada o no existe.");
     }
 
     if (cantidad > detalle[0].cantidad) {
-      throw new Error("La cantidad a devolver supera la cantidad vendida.");
+      throw new Error("La cantidad a devolver supera la cantidad vendida de este producto.");
     }
 
-    // 2. Aumentar el stock en el depósito principal (id_deposito = 1)
-    await connection.execute(
-      "UPDATE stock_depositos SET cantidad = cantidad + ? WHERE id_producto = ? AND id_deposito = 1",
-      [cantidad, id_producto]
-    );
+    // 1. Eliminar actualizaciones manuales de productos.stock:
+    //    IMPORTANTE: Ya no se ejecuta `UPDATE productos SET stock = ...`.
+    //    Nos apoyamos en los TRIGGERS de la base de datos que actualizan `productos.stock`
+    //    automáticamente cada vez que cambia `stock_depositos`. Esto reduce la complejidad
+    //    del código en el backend y centraliza la lógica de stock en la DB.
 
-    // 3. Registrar el movimiento en el Kardex
-    const comentario = `Devolución Venta #${id_venta}. Motivo: ${motivo}`;
+    // 2. Hacer dinámico el Depósito de Destino:
+    //    Usamos la sentencia `INSERT ... ON DUPLICATE KEY UPDATE` (UPSERT) en `stock_depositos`.
+    //    Esto permite sumar la cantidad al `stock_actual` si el producto ya existe en el
+    //    `id_deposito_destino`, o crear una nueva entrada si no existe.
+    //    De esta forma, el producto regresa al depósito seleccionado por el usuario.
+    const upsertStockSql = `
+      INSERT INTO stock_depositos (id_producto, id_deposito, stock_actual)
+      VALUES (?, ?, ?)
+      ON DUPLICATE KEY UPDATE stock_actual = stock_actual + VALUES(stock_actual);
+    `;
+    await connection.execute(upsertStockSql, [id_producto, id_deposito_destino, cantidad]);
+
+    // 3. Registro en Historial:
+    //    El registro en la tabla `movimientos_inventario` DEBE marcar el `id_deposito_destino`
+    //    que el usuario eligió. Esto es crucial para la trazabilidad y para que el historial
+    //    coincida con el movimiento físico real de la mercancía.
+    const comentario = `Devolución Venta #${id_venta}. Motivo: ${motivo}. Regresó a depósito ID: ${id_deposito_destino}`;
     await connection.execute(
       `INSERT INTO movimientos_inventario (id_producto, id_deposito, tipo_movimiento, cantidad, referencia_id, referencia_tabla, comentario)
-             VALUES (?, 1, 'DEVOLUCION_CLIENTE', ?, ?, 'ventas', ?)`,
-      [id_producto, cantidad, id_venta, comentario]
+             VALUES (?, ?, 'DEVOLUCION_CLIENTE', ?, ?, 'ventas', ?)`,
+      [id_producto, id_deposito_destino, cantidad, id_venta, comentario]
     );
 
-    // 4. (Opcional) Aquí podrías insertar una lógica para registrar el saldo a favor del cliente
-
     await connection.commit();
-    return { success: true, mensaje: "Devolución procesada correctamente" };
+    return { success: true, mensaje: "Devolución procesada correctamente y stock actualizado." };
   } catch (error) {
-    await connection.rollback();
+    if (connection) {
+      await connection.rollback();
+      console.error(`Transacción de devolución revertida debido a un error: ${error.message}`);
+    }
     throw error;
   } finally {
-    connection.release();
+    if (connection) {
+      connection.release();
+    }
   }
 }
 async function obtenerStockPorDepositos() {
@@ -958,7 +1205,10 @@ module.exports = {
   obtenerVentasPorMetodoPago,
   obtenerInventarioCritico,
   obtenerGananciasPorCategoria,
-  obtenerTodasLasCategorias, // Exportar la nueva función
-  eliminarProducto, // Añadir la función que falta
-  buscarProductosPredictivo, // Añadir la nueva función
+  obtenerTodasLasCategorias,
+  eliminarProducto,
+  buscarProductosPredictivo,
+  realizarVenta, // Nueva función
+  procesarDevolucionInteligente, // Nueva función
+  moverAInmovilizado, // Nueva función
 };

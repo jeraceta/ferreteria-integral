@@ -1,36 +1,45 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { procesarVenta, obtenerUltimaTasa } = require('../controllers/ventas.controller'); // Adjusted path to controllers
-const { requiereAuth } = require('../middlewares/auth.middleware');
-const { body, validationResult } = require('express-validator');
+const ventasController = require("../controllers/ventas.controller");
+const { requiereAuth } = require("../middlewares/auth.middleware");
 
-// Ruta para obtener la última tasa de cambio usada
-router.get('/ultima-tasa', requiereAuth, obtenerUltimaTasa);
+// --- Rutas Específicas y Estáticas (van primero) ---
 
-// --- RUTA PARA PROCESAR VENTA ---
-// 1. requiereAuth: El usuario debe estar autenticado.
-// 2. Middlewares de validación de express-validator.
-// 3. procesarVenta: El controlador que maneja la lógica de negocio.
-router.post('/registrar',
-    requiereAuth,
-    [ // Se agrupan las validaciones en un arreglo
-        body('datosVenta').isObject().withMessage('datosVenta debe ser un objeto.'),
-        body('detalle').isArray({ min: 1 }).withMessage('El detalle debe ser un arreglo con al menos un producto.')
-    ],
-    (req, res, next) => {
-        // Middleware intermedio para manejar los resultados de la validación
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            // Si hay errores, se crea un objeto de error estructurado y se pasa al siguiente middleware
-            const error = new Error('Error de validación en los datos de la venta.');
-            error.status = 400;
-            error.details = errors.array();
-            return next(error);
-        }
-        // Si la validación es exitosa, se pasa el control al siguiente middleware en la cadena (procesarVenta)
-        next();
-    },
-    procesarVenta // <- Llamada directa al controlador de ventas, que ahora maneja todo el flujo.
-);
+// Obtener todas las ventas (ruta general)
+router.get("/", requiereAuth, ventasController.obtenerVentas);
+
+// Obtener la última tasa de cambio
+router.get("/ultima-tasa", requiereAuth, ventasController.obtenerUltimaTasa);
+
+// Obtener los motivos de devolución para el formulario de devoluciones
+router.get("/motivos-devolucion", requiereAuth, ventasController.obtenerMotivosDevolucion);
+
+// Registrar una nueva venta
+router.post("/registrar", requiereAuth, ventasController.procesarVenta);
+
+// --- Rutas Dinámicas (van después de las estáticas) ---
+
+// Buscar ventas asociadas a una cédula de cliente
+// Se coloca aquí porque es más específica que las rutas con solo :id
+router.get("/buscar-por-cedula/:cedula", requiereAuth, ventasController.buscarVentasPorCedula);
+
+// Obtener detalles completos de una venta
+router.get("/:id/detalles", requiereAuth, ventasController.obtenerVentaDetalles);
+
+// Obtener los detalles originales de la venta (usado en el modal de devolución)
+// Esta ruta ahora funciona porque getSaleDetails se exportó en el controlador.
+router.get("/:id/original-detalles", requiereAuth, ventasController.getSaleDetails);
+
+// Generar el reporte PDF de una venta (Nota de Entrega)
+router.get("/reporte/:id", ventasController.generarReporte);
+
+// Generar el comprobante PDF de una devolución
+router.get("/reporte-devolucion/:id", requiereAuth, ventasController.generarPDFDevolucion);
+
+// Anular una venta (cambia el estado y restaura el stock)
+router.put("/anular/:id", requiereAuth, ventasController.anularVenta);
+
+// Procesar una devolución (parcial o total)
+router.post("/devolucion/:id", requiereAuth, ventasController.procesarDevolucion);
 
 module.exports = router;

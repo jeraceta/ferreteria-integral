@@ -44,12 +44,13 @@
           >
             <i class="fas fa-boxes me-2"></i>Inventario
           </a>
-          <a
-            href="ventas.html"
-            class="list-group-item list-group-item-action active"
-          >
-            <i class="fas fa-shopping-cart me-2"></i>Ventas
+          <a href="#ventasSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action ventas-dropdown-toggle">
+              <i class="fas fa-shopping-cart me-2"></i>Ventas <i class="fas fa-chevron-down float-end"></i>
           </a>
+          <div class="collapse show" id="ventasSubmenu">
+              <a href="ventas.html" class="list-group-item list-group-item-action sub-item active"><i class="fas fa-cash-register me-2"></i>Facturación</a>
+              <a href="gestion-ventas.html" class="list-group-item list-group-item-action sub-item"><i class="fas fa-history me-2"></i>Historial y Devoluciones</a>
+          </div>
           <a
             href="clientes.html"
             class="list-group-item list-group-item-action"
@@ -157,19 +158,16 @@
                           readonly
                         />
                       </div>
-                      <div class="col-12 mb-2">
-                        <label
-                          for="clienteTipoContribuyente"
-                          class="form-label small"
+                      <div class="form-group">
+                        <label for="tipoContribuyente"
                           >Tipo Contribuyente</label
                         >
-                        <input
-                          type="text"
-                          class="form-control form-control-sm"
-                          id="clienteTipoContribuyente"
-                          placeholder="Ordinario, Formal, Especial"
-                          readonly
-                        />
+                        <select id="tipoContribuyente" class="form-control">
+                          <option value="Ordinario" selected>Ordinario</option>
+                          <option value="Especial">Especial</option>
+                          <option value="Formal">Formal</option>
+                          <option value="Ocasional">Ocasional</option>
+                        </select>
                       </div>
                     </div>
                     <div class="d-grid mt-2">
@@ -261,7 +259,7 @@
                             >Generar Nota de Entrega</label
                           >
                         </div>
-                        <div class="form-group">
+                        <div class="form-group mb-2">
                           <label for="tasaCambioInput" class="form-label-sm"
                             >Tasa de Cambio $</label
                           >
@@ -272,6 +270,32 @@
                             step="0.01"
                           />
                         </div>
+                        <div class="form-group">
+                          <label for="metodoPagoSelect" class="form-label-sm"
+                            >Método de Pago</label
+                          >
+                          <select
+                            id="metodoPagoSelect"
+                            class="form-select form-control-sm"
+                          >
+                            <option value="Efectivo" selected>Efectivo</option>
+                            <option value="Tarjeta">
+                              Tarjeta de Débito/Crédito
+                            </option>
+                            <option value="Transferencia">
+                              Transferencia Bancaria
+                            </option>
+                            <option value="PagoMovil">Pago Móvil</option>
+                          </select>
+                        </div>
+                        <div class="form-group mt-2" id="campoReferencia" style="display: none;">
+                            <label for="referenciaInput" class="form-label-sm">Referencia</label>
+                            <input type="text" id="referenciaInput" class="form-control form-control-sm" placeholder="Nro. de referencia">
+                        </div>
+                        <div class="form-group mt-2">
+                            <label for="fleteInput" class="form-label-sm">Flete / Delivery ($)</label>
+                            <input type="number" id="fleteInput" class="form-control form-control-sm" value="0" min="0" step="0.01">
+                        </div>
                       </div>
                       <div class="col-lg-8 text-md-end">
                         <table
@@ -279,13 +303,22 @@
                         >
                           <tbody>
                             <tr>
-                              <td class="fs-5">Subtotal:</td>
+                              <td class="fs-5">Subtotal (Productos):</td>
                               <td class="fs-5 fw-bold">
                                 <span id="subtotalVentaBS">0.00</span> Bs
                               </td>
                               <td class="fs-5 text-muted">
                                 ($<span id="subtotalVenta">0.00</span>)
                               </td>
+                            </tr>
+                            <tr>
+                                <td class="fs-5">Flete / Delivery:</td>
+                                <td class="fs-5 fw-bold">
+                                    <span id="fleteVentaBS">0.00</span> Bs
+                                </td>
+                                <td class="fs-5 text-muted">
+                                    ($<span id="fleteVenta">0.00</span>)
+                                </td>
                             </tr>
                             <tr id="ivaRow">
                               <td class="fs-5">IVA (16%):</td>
@@ -298,7 +331,7 @@
                             </tr>
                             <tr class="border-top">
                               <td class="pt-2">
-                                <h4 class="mb-0">TOTAL USD:</h4>
+                                <h4 class="mb-0">TOTAL A PAGAR:</h4>
                               </td>
                               <td class="pt-2">
                                 <h4 class="mb-0 text-primary fw-bold">
@@ -339,6 +372,7 @@
     <!-- jsPDF library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Custom JS -->
+    <script src="sidebar.js"></script>
     <script src="ventas.js"></script>
   </body>
 </html>

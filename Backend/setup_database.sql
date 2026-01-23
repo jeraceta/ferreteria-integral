@@ -8,7 +8,7 @@ USE ferreteria;
 -- Es necesaria para la llave foránea en 'ventas'
 CREATE TABLE IF NOT EXISTS clientes (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
+    razon_social VARCHAR(100) NOT NULL,
     identificacion VARCHAR(20) UNIQUE,
     direccion VARCHAR(255),
     telefono VARCHAR(20),
@@ -25,7 +25,22 @@ CREATE TABLE IF NOT EXISTS proveedores (
     email VARCHAR(100)
 );
 
--- 4. TABLA DE PRODUCTOS
+-- 4. TABLA DE MOTIVOS DE DEVOLUCIÓN
+CREATE TABLE IF NOT EXISTS motivos_devolucion (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    motivo VARCHAR(255) NOT NULL,
+    descripcion TEXT
+);
+
+-- 5. DATOS INICIALES PARA MOTIVOS DE DEVOLUCIÓN
+INSERT INTO motivos_devolucion (motivo) VALUES 
+('Producto equivocado'),
+('Defecto de fábrica'),
+('Dañado en transporte'),
+('No cumple expectativas'),
+('Otro');
+
+-- 6. TABLA DE PRODUCTOS
 -- Contiene el STOCK y el COSTO (se actualizan con las transacciones)
 CREATE TABLE IF NOT EXISTS productos (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -43,6 +58,7 @@ CREATE TABLE IF NOT EXISTS productos (
 CREATE TABLE IF NOT EXISTS ventas (
     id INT AUTO_INCREMENT PRIMARY KEY,
     id_cliente INT NOT NULL,
+    id_usuario INT NOT NULL, -- Agregado para el usuario que realizó la venta
     numero_factura VARCHAR(50) UNIQUE NOT NULL,
     fecha_venta TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     total_neto DECIMAL(10, 2),
@@ -52,7 +68,8 @@ CREATE TABLE IF NOT EXISTS ventas (
     impuestos DECIMAL(10, 2),
     total_bruto DECIMAL(10, 2) NOT NULL,
     metodo_pago VARCHAR(50),
-    FOREIGN KEY (id_cliente) REFERENCES clientes(id)
+    FOREIGN KEY (id_cliente) REFERENCES clientes(id),
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id) -- Asumiendo que existe una tabla 'usuarios'
 );
 
 -- 6. TABLA DETALLE VENTA (Líneas de la factura)
@@ -115,7 +132,7 @@ CREATE TABLE IF NOT EXISTS movimientos_inventario (
 -- 10. INSERCIÓN DE DATOS INICIALES (Mínimo para que la prueba funcione)
 -- Necesitamos 1 producto, 1 cliente y 1 proveedor para que las llaves foráneas no fallen.
 
-INSERT INTO clientes (nombre, identificacion) VALUES ('Cliente Prueba Principal', 'V-12345678');
+INSERT INTO clientes (razon_social, identificacion) VALUES ('Cliente Prueba Principal', 'V-12345678');
 INSERT INTO proveedores (nombre, contacto) VALUES ('Proveedor Principal S.A.', 'Juan Pérez');
 INSERT INTO productos (codigo, nombre, stock, precio_venta, precio_costo) 
 VALUES ('CL-001', 'Clavos de 2 Pulgadas', 50, 2.50, 1.50);
