@@ -44,7 +44,7 @@ node test_transacciones.js
 
 ## 🛡️ Notas de Seguridad
 - El archivo `.env` está excluido por `.gitignore` para proteger credenciales.
-- Las rutas sensibles requieren el middleware `esGerente` (validación de rol en JWT).
+- Las rutas sensibles requieren el middleware `esAdmin` (validación de rol en JWT).
 - Todas las operaciones críticas de stock utilizan **Transacciones SQL** para evitar inconsistencias.
 
 ---

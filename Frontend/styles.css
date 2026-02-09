@@ -39,6 +39,8 @@ body {
     height: 100vh;
     z-index: 100; /* Ensure it's above content */
     top: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .sidebar .logo-container {
@@ -68,6 +70,7 @@ body {
 
 .sidebar .list-group {
     width: 100%;
+    flex-grow: 1; /* Allow the list of links to grow and push subsequent items down */
 }
 
 .sidebar .list-group-item {
@@ -168,27 +171,27 @@ h6 { font-size: 0.75rem; margin-bottom: 1px; }
 }
 
 
-/* Specific styles for Sales Module predictive search dropdown */
+/* Predictive Search Results - Refined for Alignment */
 #listaSugerenciasProductos {
     position: absolute;
-    /* Adjust width to match the input field if it's inside a relative container */
-    /* For now, we assume it's a sibling and may need full width of its parent */
-    width: calc(100% - 2rem); /* Example: Adjust based on parent padding */
+    width: calc(100% - 1rem);
     z-index: 10000;
     background: #fff;
     border: 1px solid #ced4da;
     border-top: none;
-    max-height: 250px;
+    max-height: 300px;
     overflow-y: auto;
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 
 .sugerencia-item {
-    padding: 0.75rem 1.25rem;
+    display: flex;
+    justify-content: space-between; /* Alineación de extremos */
+    align-items: center;
+    padding: 0.6rem 0.8rem;
     cursor: pointer;
-    background-color: #fff;
-    color: #212529;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid #f0f0f0;
+    gap: 1rem; /* Espacio entre bloque izquierdo y derecho */
 }
 
 .sugerencia-item:last-child {
@@ -196,15 +199,69 @@ h6 { font-size: 0.75rem; margin-bottom: 1px; }
 }
 
 .sugerencia-item:hover {
-    background-color: #0d6efd; /* Bootstrap primary blue */
-    color: #fff;
+    background-color: #f1f5f9;
 }
 
-.sugerencia-item.no-results {
-    font-style: italic;
-    color: #6c757d;
-    cursor: default;
+.sugerencia-item.disabled-suggestion {
+    color: #adb5bd;
+    cursor: not-allowed;
 }
+
+.sugerencia-bloque-izquierdo,
+.sugerencia-bloque-derecho {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* Espacio interno en cada bloque */
+}
+
+.sugerencia-bloque-izquierdo {
+    min-width: 0; /* Permite que el bloque se encoja si es necesario */
+}
+.sugerencia-bloque-derecho {
+    flex-shrink: 0; /* Evita que el bloque derecho se encoja */
+}
+
+
+.sugerencia-codigo {
+    font-weight: bold;
+    color: #0056b3;
+}
+
+.sugerencia-nombre {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sugerencia-separador {
+    color: #ced4da;
+    font-size: 0.8em;
+}
+
+.sugerencia-marca {
+    color: #6c757d;
+    font-size: 0.9em;
+    font-style: italic;
+    white-space: nowrap;
+}
+
+.sugerencia-precio {
+    font-weight: bold;
+    color: #198754;
+    white-space: nowrap;
+}
+
+.sugerencia-stock {
+    font-size: 0.9em;
+    color: #495057;
+    background-color: #e9ecef;
+    padding: 3px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
@@ -406,4 +463,113 @@ label.small {
     background: #343a40;
 }
 
+#logout-button {
+    margin-top: auto; /* Push to the bottom */
+    border-top: 1px solid #495057;
+}
 
+#logout-button:hover {
+    background-color: #d83a3a; /* Soft red for distinction */
+    color: white;
+}
+
+/* === Estilos para la Página de Login === */
+
+.login-body {
+    background-color: #f0f2f5; /* Un gris muy claro y limpio */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+.login-container {
+    text-align: center;
+}
+
+.login-card {
+    background: #ffffff;
+    padding: 2.5rem 3rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 400px;
+    display: inline-block;
+}
+
+.login-logo {
+    max-width: 150px;
+    margin-bottom: 1.5rem;
+}
+
+.login-card h2 {
+    font-size: 1.8rem;
+    color: #333;
+    margin-bottom: 2rem;
+}
+
+.input-group {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+.input-group i {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #adb5bd;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 0.8rem 1rem 0.8rem 2.5rem; /* Padding para dejar espacio al icono */
+    border: 1px solid #ced4da;
+    border-radius: 5px;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+}
+
+.input-group input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.btn-login {
+    width: 100%;
+    padding: 0.8rem;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #fff;
+    background-color: #007bff; /* Azul corporativo */
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.btn-login:hover {
+    background-color: #0056b3; /* Un azul más oscuro al pasar el mouse */
+}
+
+.error-message {
+    color: #dc3545;
+    margin-top: 1rem;
+    height: 20px;
+    font-size: 0.9rem;
+}
+
+.forgot-password-link {
+    display: block;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: #6c757d;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.forgot-password-link:hover {
+    color: #007bff;
+}

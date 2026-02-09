@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CONFIGURACIÓN Y URLs ---
     // Define la URL base para las peticiones a la API.
     const API_BASE_URL = 'http://localhost:3000/api/productos';
+    const API_CATEGORIAS_URL = 'http://localhost:3000/api/categorias';
 
     // --- ELEMENTOS DEL DOM ---
     // Obtiene referencias a los elementos HTML con los que vamos a interactuar.
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const productoId = document.getElementById('productoId');
     const codigo = document.getElementById('codigo');
     const nombre = document.getElementById('nombre');
+    const marca = document.getElementById('marca');
     const descripcion = document.getElementById('descripcion');
     const selectCategoria = document.getElementById('selectCategoria');
     const precioCosto = document.getElementById('precioCosto');
@@ -93,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
      * 1. Carga los productos desde el backend y los muestra en la tabla.
      */
     const cargarProductos = async () => {
-        tablaProductos.innerHTML = '<tr><td colspan="9" class="text-center">Cargando productos...</td></tr>';
+        tablaProductos.innerHTML = '<tr><td colspan="10" class="text-center">Cargando productos...</td></tr>';
         try {
             const token = getToken();
             if (!token) {
@@ -129,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const mostrarProductos = (productosAMostrar) => {
         tablaProductos.innerHTML = '';
         if (productosAMostrar.length === 0) {
-            tablaProductos.innerHTML = '<tr><td colspan="9" class="text-center">No hay productos para mostrar.</td></tr>';
+            tablaProductos.innerHTML = '<tr><td colspan="10" class="text-center">No hay productos para mostrar.</td></tr>';
             return;
         }
 
@@ -139,6 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${producto.id}</td>
                 <td>${producto.codigo}</td>
                 <td>${producto.nombre}</td>
+                <td>${producto.marca || ''}</td>
                 <td>${producto.descripcion || ''}</td>
                 <td>${producto.nombre_categoria || 'Sin categoría'}</td>
                 <td>$${Number(producto.precio_venta || 0).toFixed(2)}</td>
@@ -169,11 +172,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const token = getToken();
             if (!token) return;
 
-            const response = await fetch(`${API_BASE_URL}/categorias`, {
+            // La URL ahora apunta directamente al endpoint correcto
+            const response = await fetch(API_CATEGORIAS_URL, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            if (!response.ok) {
+                // Lanzamos un error específico para que el bloque catch lo maneje
+                throw new Error(`Error ${response.status}: ${response.statusText}`);
+            }
 
             // Actualizar el estado local y el dropdown
             categorias = await response.json();
@@ -188,9 +195,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectCategoria.appendChild(option);
             });
             selectCategoria.value = selectedValue; // Restaurar valor si aún existe
+            selectCategoria.disabled = false; // Habilitar el select por si estaba deshabilitado
+
         } catch (error) {
             console.error('Error al cargar categorías:', error);
-            showAlert('Error', 'No se pudieron cargar las categorías.', 'error');
+            // Modificación clave: No mostrar un alert que bloquee, sino informar en el propio campo.
+            selectCategoria.innerHTML = '<option value="">❌ Error al cargar</option>';
+            selectCategoria.disabled = true; // Deshabilitar para evitar interacción
         }
     };
 
@@ -224,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Si no existe localmente, intentar crearla en el backend
             try {
                 const token = getToken();
-                const response = await fetch(`${API_BASE_URL}/categorias`, {
+                const response = await fetch(`${API_CATEGORIAS_URL}/crear`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -237,14 +248,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!response.ok) {
                     // El backend también valida, mostramos su error
-                    throw new Error(resultado.error || 'Error del servidor');
+                    throw new Error(resultado.message || 'Error del servidor');
                 }
                 
-                showAlert('Éxito', `Categoría "${resultado.categoria.nombre}" creada.`, 'success');
+                showAlert('Éxito', `Categoría "${resultado.nombre}" creada.`, 'success');
                 
                 // Recargar las categorías y seleccionar la nueva
                 await cargarCategorias();
-                selectCategoria.value = resultado.categoria.id;
+                selectCategoria.value = resultado.id;
 
             } catch (error) {
                 console.error('Error al crear categoría:', error);
@@ -282,6 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
             productoId.value = producto.id;
             codigo.value = producto.codigo;
             nombre.value = producto.nombre;
+            marca.value = producto.marca || '';
             descripcion.value = producto.descripcion;
             precioCosto.value = producto.precio_costo;
             precioVenta.value = producto.precio_venta;
@@ -342,43 +354,86 @@ document.addEventListener('DOMContentLoaded', () => {
      * 8. Maneja el envío del formulario para crear o actualizar un producto.
      */
     formProducto.addEventListener('submit', async (e) => {
+        // Prevenir el comportamiento por defecto del formulario (recargar la página)
         e.preventDefault();
 
-        const id = productoId.value;
-        const method = id ? 'PUT' : 'POST';
-        const url = id ? `${API_BASE_URL}/${id}` : API_BASE_URL;
+        const result = await Swal.fire({
+            title: '¿Guardar cambios?',
+            text: "Confirma que los datos del producto son correctos.",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#0d6efd',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sí, guardar',
+            cancelButtonText: 'Cancelar'
+        });
 
-        const productoData = {
-            codigo: codigo.value,
-            nombre: nombre.value,
-            descripcion: descripcion.value,
-            stock: parseInt(stockActual.value),
-            precio_costo: parseFloat(precioCosto.value),
-            precio_venta: parseFloat(precioVenta.value),
-            id_categoria: parseInt(selectCategoria.value)
-        };
+        if (result.isConfirmed) {
+            let productoData;
+            try {
+                const stockMinimoInput = document.getElementById('stockMinimo')?.value;
+                productoData = {
+                    codigo: document.getElementById('codigo').value,
+                    nombre: document.getElementById('nombre').value,
+                    marca: document.getElementById('marca').value,
+                    descripcion: document.getElementById('descripcion').value,
+                    precio_venta: parseFloat(document.getElementById('precioVenta').value) || 0,
+                    precio_costo: parseFloat(document.getElementById('precioCosto').value) || 0,
+                    id_categoria: selectCategoria.value ? parseInt(selectCategoria.value, 10) : null,
+                    stock: parseInt(document.getElementById('stockActual').value, 10) || 0,
+                    stock_minimo: stockMinimoInput !== '' ? parseInt(stockMinimoInput) : 2
+                };
+            } catch (error) {
+                console.error('Error al recolectar datos del formulario:', error);
+                Swal.fire({
+                    title: 'Error de Datos',
+                    text: 'Hubo un problema al leer los datos del formulario: ' + error.message,
+                    icon: 'error'
+                });
+                return;
+            }
 
-        try {
-            const token = getToken();
-            const response = await fetch(url, {
-                method: method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(productoData)
-            });
+            const id = productoId.value;
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `${API_BASE_URL}/${id}` : API_BASE_URL;
 
-            const data = await response.json();
+            try {
+                const token = getToken();
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(productoData)
+                });
 
-            if (!response.ok) throw new Error(data.error || 'Error al guardar.');
+                const data = await response.json();
 
-            showAlert('Guardado', 'Producto guardado exitosamente.', 'success');
-            modalProducto.hide();
-            cargarProductos();
-        } catch (error) {
-            console.error('Error al guardar producto:', error);
-            showAlert('Error', error.message, 'error');
+                if (!response.ok) {
+                    // Si el backend manda un error (ej: código duplicado), lo mostramos.
+                    throw new Error(data.message || 'Error desconocido del servidor.');
+                }
+                
+                await Swal.fire({
+                    title: id ? '¡Producto Actualizado!' : '¡Producto Registrado!',
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false,
+                    timerProgressBar: true
+                });
+
+                modalProducto.hide();
+                cargarProductos();
+
+            } catch (error) {
+                console.error('Error al guardar producto:', error);
+                Swal.fire({
+                    title: 'Error al Guardar',
+                    text: error.message,
+                    icon: 'error'
+                });
+            }
         }
     });
 
@@ -389,6 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const searchTerm = inputBuscarProducto.value.toLowerCase();
         const productosFiltrados = productos.filter(p => 
             (p.nombre?.toLowerCase() || '').includes(searchTerm) ||
+            (p.marca?.toLowerCase() || '').includes(searchTerm) ||
             (p.nombre_categoria?.toLowerCase() || '').includes(searchTerm)
         );
         mostrarProductos(productosFiltrados);

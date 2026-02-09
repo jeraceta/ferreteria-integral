@@ -29,34 +29,17 @@ function requiereAuth(req, res, next) {
     }
 }
 
-// Middleware para verificar que el usuario sea GERENTE
-function esGerente(req, res, next) {
-    // Primero verificamos que esté autenticado
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) {
-        return res.status(401).json({ error: "Acceso denegado. No se proporcionó un token." });
-    }
-
-    try {
-        const jwtSecret = process.env.JWT_SECRET;
-        if (!jwtSecret) {
-            return res.status(500).json({ error: 'JWT secret not configured on server' });
-        }
-
-        const verificado = jwt.verify(token, jwtSecret);
-        
-        // Verificamos que el rol sea 'gerente'
-        if (verificado.rol === 'gerente') {
-            req.user = verificado;
-            next(); // ¡Adelante!
+// Middleware para verificar que el usuario sea Administrador
+function esAdmin(req, res, next) {
+    // Reutilizamos la lógica de requiereAuth para verificar el token
+    requiereAuth(req, res, () => {
+        // Una vez autenticado, verificamos el rol (insensible a mayúsculas)
+        if (req.user && req.user.rol && req.user.rol.toLowerCase() === 'administrador') {
+            next(); // El usuario es Administrador, ¡Adelante!
         } else {
-            res.status(403).json({ error: "Permisos insuficientes. Se requiere rol de Gerente." });
+            res.status(403).json({ error: "Permisos insuficientes. Se requiere rol de Administrador." });
         }
-    } catch (error) {
-        res.status(401).json({ error: "Token inválido o expirado." });
-    }
+    });
 }
 
-module.exports = { requiereAuth, esGerente };
+module.exports = { requiereAuth, esAdmin };

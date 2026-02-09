@@ -6,7 +6,7 @@ const router = express.Router();
 // CORRECTED: Importa el controlador de inventario que contiene la lógica de productos.
 const inventarioController = require('../controllers/inventario.controller');
 // Importa el middleware de autenticación para proteger las rutas.
-const { requiereAuth, esGerente } = require('../middlewares/auth.middleware');
+const { requiereAuth, esAdmin } = require('../middlewares/auth.middleware');
 
 // --- DEFINICIÓN DE RUTAS PARA PRODUCTOS ---
 
@@ -21,7 +21,7 @@ router.get('/buscar', requiereAuth, inventarioController.buscarProductosPredicti
 
 // TODO: La función 'createCategory' no fue encontrada en el controlador.
 // Ruta para crear una nueva categoría.
-// router.post('/categorias', requiereAuth, esGerente, inventarioController.createCategory);
+// router.post('/categorias', requiereAuth, esAdmin, inventarioController.createCategory);
 
 // Ruta para obtener una lista de todos los productos.
 // Se aplica el middleware 'requiereAuth' para asegurar que el usuario esté autenticado.
@@ -33,15 +33,15 @@ router.get('/:id', requiereAuth, inventarioController.obtenerProductoPorId);
 
 // Ruta para crear un nuevo producto.
 // Utiliza el método POST y está protegida por autenticación.
-router.post('/', requiereAuth, esGerente, inventarioController.crearProducto);
+router.post('/', requiereAuth, esAdmin, inventarioController.crearProducto);
 
 // Ruta para actualizar un producto existente por su ID.
 // Utiliza el método PUT y está protegida por autenticación.
-router.put('/:id', requiereAuth, esGerente, inventarioController.actualizarProducto);
+router.put('/:id', requiereAuth, esAdmin, inventarioController.actualizarProducto);
 
 // Ruta para eliminar un producto por su ID.
 // Utiliza el método DELETE y está protegida por autenticación.
-router.delete('/:id', requiereAuth, esGerente, inventarioController.eliminarProducto);
+router.delete('/:id', requiereAuth, esAdmin, inventarioController.eliminarProducto);
 
 // Exporta el enrutador configurado para que pueda ser utilizado en el archivo principal del servidor (index.js).
 module.exports = router;

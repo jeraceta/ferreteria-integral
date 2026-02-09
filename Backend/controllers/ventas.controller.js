@@ -30,9 +30,10 @@ const anularVenta = async (req, res, next) => {
     }
 
     // Paso A: Cambiar el estado de la venta a 'ANULADA'
-    await connection.query("UPDATE ventas SET estado = 'ANULADA' WHERE id = ?", [
-      id,
-    ]);
+    await connection.query(
+      "UPDATE ventas SET estado = 'ANULADA' WHERE id = ?",
+      [id],
+    );
 
     // Paso B: Buscar todos los productos de esa venta en detalle_ventas
     const [detalles] = await connection.query(
@@ -46,25 +47,25 @@ const anularVenta = async (req, res, next) => {
       );
     }
 
-          // Paso C: Devolver las cantidades al inventario (id_deposito = 1, Principal)
-          for (const detalle of detalles) {
-            await connection.query(
-              "UPDATE stock_depositos SET cantidad = cantidad + ? WHERE id_producto = ? AND id_deposito = 1",
-              [detalle.cantidad, detalle.id_producto],
-            );
-    
-            // Recalcular el stock total del producto en la tabla `productos`
-            const [totalStockResult] = await connection.query(
-              `SELECT SUM(cantidad) AS total_cantidad FROM stock_depositos WHERE id_producto = ?`,
-              [detalle.id_producto],
-            );
-            const totalStock = totalStockResult[0].total_cantidad || 0;
-    
-            await connection.query(
-              "UPDATE productos SET stock = ? WHERE id_producto = ?",
-              [totalStock, detalle.id_producto],
-            );
-          }
+    // Paso C: Devolver las cantidades al inventario (id_deposito = 1, Principal)
+    for (const detalle of detalles) {
+      await connection.query(
+        "UPDATE stock_depositos SET cantidad = cantidad + ? WHERE id_producto = ? AND id_deposito = 1",
+        [detalle.cantidad, detalle.id_producto],
+      );
+
+      // Recalcular el stock total del producto en la tabla `productos`
+      const [totalStockResult] = await connection.query(
+        `SELECT SUM(cantidad) AS total_cantidad FROM stock_depositos WHERE id_producto = ?`,
+        [detalle.id_producto],
+      );
+      const totalStock = totalStockResult[0].total_cantidad || 0;
+
+      await connection.query(
+        "UPDATE productos SET stock = ? WHERE id_producto = ?",
+        [totalStock, detalle.id_producto],
+      );
+    }
     await connection.commit();
     res
       .status(200)
@@ -93,7 +94,7 @@ const buscarVentasPorCedula = async (req, res, next) => {
              FROM ventas v 
              INNER JOIN clientes c ON v.id_cliente = c.id 
              WHERE c.rif_cedula LIKE ?`,
-      [searchTerm]
+      [searchTerm],
     );
     const totalVentas = totalRows[0].total;
     const totalPages = Math.ceil(totalVentas / limit);
@@ -106,7 +107,7 @@ const buscarVentasPorCedula = async (req, res, next) => {
              WHERE c.rif_cedula LIKE ?
              ORDER BY v.fecha_venta DESC
              LIMIT ? OFFSET ?`,
-      [searchTerm, limit, offset]
+      [searchTerm, limit, offset],
     );
 
     res.json({
@@ -156,12 +157,7 @@ const procesarDevolucion = async (req, res, next) => {
     return res.status(400).json({ error: "ID de venta inválido." });
   }
 
-  if (
-    !id_motivo ||
-    !id_deposito ||
-    !detalles ||
-    !Array.isArray(detalles)
-  ) {
+  if (!id_motivo || !id_deposito || !detalles || !Array.isArray(detalles)) {
     return res.status(400).json({
       error:
         "Faltan datos requeridos: id_motivo, id_deposito y una lista de detalles son obligatorios.",
@@ -231,8 +227,9 @@ const procesarDevolucion = async (req, res, next) => {
          ON DUPLICATE KEY UPDATE cantidad = cantidad + ?`,
         [id_producto_num, id_deposito_num, cantidad, cantidad],
       );
-      
-      if (id_deposito_num === 1) { // 1 = Venta
+
+      if (id_deposito_num === 1) {
+        // 1 = Venta
         await connection.query(
           "UPDATE productos SET stock = stock + ? WHERE id = ?",
           [cantidad, id_producto_num],
@@ -241,9 +238,10 @@ const procesarDevolucion = async (req, res, next) => {
     }
 
     // Siempre se marca la venta como 'Devuelta' para reflejar que ha tenido una devolución.
-    await connection.query("UPDATE ventas SET estado = 'Devuelta' WHERE id = ?", [
-      id_venta_num,
-    ]);
+    await connection.query(
+      "UPDATE ventas SET estado = 'Devuelta' WHERE id = ?",
+      [id_venta_num],
+    );
 
     await connection.commit();
     res
@@ -337,11 +335,7 @@ const generarPDFDevolucion = async (req, res, next) => {
     doc.setFont("helvetica", "normal");
     doc.text(`${devolucion.razon_social}`, 40, 58);
     doc.text(`C.I./RIF: ${devolucion.rif_cedula}`, 18, 64);
-    doc.text(
-      `Dirección: ${devolucion.direccion_fiscal || "N/A"}`,
-      18,
-      70,
-    );
+    doc.text(`Dirección: ${devolucion.direccion_fiscal || "N/A"}`, 18, 70);
 
     // --- TABLA DE ARTÍCULOS DEVUELTOS ---
     const tableBody = detallesDevolucion.map((d) => [
@@ -369,32 +363,27 @@ const generarPDFDevolucion = async (req, res, next) => {
       (sum, item) => sum + safeParseFloat(item.total),
       0,
     );
-    const totalDevueltoBs = montoTotalDevuelto * safeParseFloat(devolucion.tasa_bcv);
+    const totalDevueltoBs =
+      montoTotalDevuelto * safeParseFloat(devolucion.tasa_bcv);
 
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.text(
-      "MONTO TOTAL A FAVOR DEL CLIENTE:",
-      pageWidth - 95,
-      finalY + 15,
-      { align: "left" },
-    );
-    doc.text(
-      `$${montoTotalDevuelto.toFixed(2)}`,
-      pageWidth - 15,
-      finalY + 15,
-      { align: "right" },
-    );
+    doc.text("MONTO TOTAL A FAVOR DEL CLIENTE:", pageWidth - 95, finalY + 15, {
+      align: "left",
+    });
+    doc.text(`$${montoTotalDevuelto.toFixed(2)}`, pageWidth - 15, finalY + 15, {
+      align: "right",
+    });
 
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
-     doc.text(
+    doc.text(
       `Equivalente a: ${totalDevueltoBs.toFixed(2)} Bs. (Tasa: ${safeParseFloat(devolucion.tasa_bcv).toFixed(2)})`,
       pageWidth - 15,
       finalY + 21,
       { align: "right" },
     );
-    
+
     finalY += 25;
 
     // --- MOTIVO Y COMENTARIOS ---
@@ -405,14 +394,14 @@ const generarPDFDevolucion = async (req, res, next) => {
     doc.text(devolucion.motivo || "No especificado", 55, finalY + 10);
 
     if (devolucion.comentario) {
-       doc.setFont("helvetica", "italic");
-       const splitComentario = doc.splitTextToSize(
+      doc.setFont("helvetica", "italic");
+      const splitComentario = doc.splitTextToSize(
         `Comentario: ${devolucion.comentario}`,
-        pageWidth - 28
+        pageWidth - 28,
       );
       doc.text(splitComentario, 14, finalY + 16);
     }
-    
+
     // --- PIE DE PÁGINA ---
     doc.setFontSize(8);
     doc.setFont("helvetica", "italic");
@@ -567,9 +556,7 @@ const procesarVenta = async (req, res, next) => {
       const { id_producto, cantidad, precio_unitario } = detalle;
 
       if (!id_producto || cantidad <= 0 || precio_unitario === undefined) {
-        throw new Error(
-          `El detalle del producto ${id_producto} es inválido.`,
-        );
+        throw new Error(`El detalle del producto ${id_producto} es inválido.`);
       }
 
       await connection.query(
@@ -636,9 +623,7 @@ const obtenerUltimaTasa = async (req, res, next) => {
     );
   } catch (error) {
     if (error.code === "ER_NO_SUCH_TABLE") {
-      console.warn(
-        "Tabla 'tasas_cambio' no encontrada. Intentando fallback.",
-      );
+      console.warn("Tabla 'tasas_cambio' no encontrada. Intentando fallback.");
     } else {
       return next(error);
     }
@@ -686,11 +671,12 @@ const generarReporte = async (req, res, next) => {
     }
     const venta = ventaData[0];
 
-    // 2. Obtener detalles de la venta
+    // 2. Obtener detalles de la venta, incluyendo la marca del producto.
     const [detallesVenta] = await pool.query(
       `SELECT 
                 dv.cantidad, 
                 p.nombre AS descripcion,
+                p.marca,
                 dv.precio_unitario, 
                 (dv.cantidad * dv.precio_unitario) AS total
              FROM detalle_ventas dv 
@@ -805,20 +791,26 @@ const generarReporte = async (req, res, next) => {
     doc.text(metodoPago, pageWidth / 2, 60);
 
     // Lógica de Referencia: Si el método de pago es diferente a 'Efectivo', muestra la referencia.
-    if (venta.metodo_pago && venta.metodo_pago.toLowerCase() !== 'efectivo') {
-        doc.setFont("helvetica", "bold");
-        doc.text("Referencia:", pageWidth / 2, 72); // Adjusted Y position due to new address line
-        doc.setFont("helvetica", "normal");
-        doc.text(String(venta.referencia || "N/A"), pageWidth / 2 + 25, 72);
+    if (venta.metodo_pago && venta.metodo_pago.toLowerCase() !== "efectivo") {
+      doc.setFont("helvetica", "bold");
+      doc.text("Referencia:", pageWidth / 2, 72); // Adjusted Y position due to new address line
+      doc.setFont("helvetica", "normal");
+      doc.text(String(venta.referencia || "N/A"), pageWidth / 2 + 25, 72);
     }
 
     // --- TABLA DE ARTÍCULOS ---
-    const tableBody = detallesVenta.map((d) => [
-      d.cantidad,
-      d.descripcion,
-      `$${safeParseFloat(d.precio_unitario).toFixed(2)}`,
-      `$${safeParseFloat(d.total).toFixed(2)}`,
-    ]);
+    const tableBody = detallesVenta.map((d) => {
+      // Estrategia de Diseño: se concatena la marca a la descripción si esta existe.
+      const descripcionConMarca = d.marca
+        ? `${d.descripcion} [Marca: ${d.marca}]`
+        : d.descripcion;
+      return [
+        d.cantidad,
+        descripcionConMarca,
+        `$${safeParseFloat(d.precio_unitario).toFixed(2)}`,
+        `$${safeParseFloat(d.total).toFixed(2)}`,
+      ];
+    });
 
     doc.autoTable({
       startY: 78,
@@ -846,7 +838,7 @@ const generarReporte = async (req, res, next) => {
     } else {
       currentY = Math.max(doc.lastAutoTable.finalY + 8, finalYAnchor - 40);
     }
-    
+
     const totalXAlign = pageWidth - 65;
     const valueXAlign = pageWidth - 15;
 
@@ -884,7 +876,7 @@ const generarReporte = async (req, res, next) => {
 
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    
+
     doc.text("TOTAL A PAGAR:", totalXAlign, currentY, { align: "left" });
     doc.text(
       `$${safeParseFloat(venta.total).toFixed(2)}`,
@@ -897,14 +889,12 @@ const generarReporte = async (req, res, next) => {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
 
-    const totalBolivares = safeParseFloat(venta.total) * safeParseFloat(venta.tasa_bcv);
+    const totalBolivares =
+      safeParseFloat(venta.total) * safeParseFloat(venta.tasa_bcv);
     doc.text("Total en Bolívares:", totalXAlign, currentY, { align: "left" });
-    doc.text(
-      `${totalBolivares.toFixed(2)} Bs.`,
-      valueXAlign,
-      currentY,
-      { align: "right" },
-    );
+    doc.text(`${totalBolivares.toFixed(2)} Bs.`, valueXAlign, currentY, {
+      align: "right",
+    });
     currentY += 6;
 
     doc.setTextColor(100);
@@ -935,6 +925,120 @@ const generarReporte = async (req, res, next) => {
   }
 };
 
+// Implementamos la lógica de control de caja. El Reporte X permite auditar las ventas PENDIENTES sin afectar la base de datos, mientras que el Reporte Z formaliza el cierre diario en la tabla cierres_diarios y libera la caja para el siguiente turno.
+const obtenerReporteX = async (req, res, next) => {
+  try {
+    // Consulta principal para los totales
+    const [reporte] = await pool.query(`
+      SELECT 
+        IFNULL(SUM(v.total), 0) as ingresos_totales,
+        IFNULL(SUM(dv.cantidad * p.precio_costo), 0) as costo_total_mercancia,
+        (IFNULL(SUM(v.total), 0) - IFNULL(SUM(dv.cantidad * p.precio_costo), 0)) as utilidad_neta
+      FROM ventas v
+      JOIN detalle_ventas dv ON v.id = dv.id_venta
+      JOIN productos p ON dv.id_producto = p.id
+      WHERE v.estado_cierre = 'PENDIENTE'
+    `);
+
+    // Consulta para el desglose por método de pago
+    const [desglosePagos] = await pool.query(`
+      SELECT metodo_pago, IFNULL(SUM(total), 0) as total
+      FROM ventas
+      WHERE estado_cierre = 'PENDIENTE'
+      GROUP BY metodo_pago
+    `);
+
+    res.json({
+      success: true,
+      tipo: "REPORTE X",
+      mensaje: "Lectura parcial de ventas acumuladas.",
+      datos: {
+        ...reporte[0],
+        desglose_pagos: desglosePagos,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Implementamos la lógica de control de caja. El Reporte X permite auditar las ventas PENDIENTES sin afectar la base de datos, mientras que el Reporte Z formaliza el cierre diario en la tabla cierres_diarios y libera la caja para el siguiente turno.
+const generarCierreZ = async (req, res, next) => {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // 1. Obtener los totales y bloquear las filas para el cierre
+    const [totales] = await connection.execute(`
+      SELECT 
+        IFNULL(SUM(v.total), 0) as ingresos_totales,
+        IFNULL(SUM(dv.cantidad * p.precio_costo), 0) as costo_total_mercancia
+      FROM ventas v
+      JOIN detalle_ventas dv ON v.id = dv.id_venta
+      JOIN productos p ON dv.id_producto = p.id
+      WHERE v.estado_cierre = 'PENDIENTE'
+      FOR UPDATE
+    `);
+
+    const ingresos = parseFloat(totales[0].ingresos_totales);
+    const costos = parseFloat(totales[0].costo_total_mercancia);
+    const utilidad = ingresos - costos;
+
+    if (ingresos === 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "No hay ventas pendientes para realizar un cierre Z.",
+      });
+    }
+
+    // 2. Obtener el desglose de pagos para el reporte
+    const [desglosePagos] = await connection.execute(`
+      SELECT metodo_pago, IFNULL(SUM(total), 0) as total
+      FROM ventas
+      WHERE estado_cierre = 'PENDIENTE'
+      GROUP BY metodo_pago
+    `);
+
+    // 3. Guardar en el historial de cierres usando el ID del usuario autenticado
+    const [cierreResult] = await connection.execute(
+      `INSERT INTO cierres_diarios (ingresos_totales, costo_mercancia, utilidad_neta, usuario_id) 
+       VALUES (?, ?, ?, ?)`,
+      [ingresos, costos, utilidad, req.user.id], // req.user.id viene del middleware de auth
+    );
+    const id_cierre = cierreResult.insertId;
+
+    // 4. Marcar todas las ventas PENDIENTES como CERRADAS
+    await connection.execute(
+      `
+      UPDATE ventas 
+      SET estado_cierre = 'CERRADO', id_cierre_diario = ?
+      WHERE estado_cierre = 'PENDIENTE'
+    `,
+      [id_cierre],
+    );
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: "Reporte Z generado con éxito. La caja ha sido cerrada.",
+      datos: {
+        ingresos_totales: ingresos,
+        costo_total_mercancia: costos,
+        utilidad_neta: utilidad,
+        desglose_pagos: desglosePagos,
+      },
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    next(error);
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
 module.exports = {
   procesarVenta,
   obtenerUltimaTasa,
@@ -946,5 +1050,7 @@ module.exports = {
   procesarDevolucion,
   generarPDFDevolucion,
   anularVenta,
-  getSaleDetails, // Añadido para que esté disponible en el router
+  getSaleDetails,
+  obtenerReporteX, // Añadido para el control de caja
+  generarCierreZ, // Añadido para el control de caja
 };

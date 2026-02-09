@@ -2,12 +2,12 @@ const express = require('express');
 const router = express.Router();
 // Importamos el controlador 
 const inventarioController = require('../inventario.controller');
-const { esGerente } = require('../middlewares/auth.middleware');
+const { esAdmin } = require('../middlewares/auth.middleware');
 const { body, validationResult } = require('express-validator');
 
 // Las compras solo pueden ser realizadas por gerentes
 router.post('/comprar',
-    esGerente,
+    esAdmin,
     body('datosCompra').exists().withMessage('datosCompra es requerido'),
     body('detalle').isArray().withMessage('detalle debe ser un arreglo'),
     async (req, res, next) => {

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gestión de Caja - Sistema Ferretería</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="auth.js"></script>
+  </head>
+  <body class="bg-light">
+    <div id="wrapper">
+      <!-- Sidebar (asumimos que se carga dinámicamente con sidebar.js) -->
+      <div id="sidebar-container"></div>
+
+      <!-- Page Content -->
+      <div id="page-content-wrapper">
+        <div class="container-fluid content-offset">
+          <main>
+            <h1 class="mb-4">Gestión de Caja</h1>
+            <div class="row">
+              <div class="col-12">
+                <div class="alert alert-info" role="alert">
+                  <h4 class="alert-heading">
+                    <i class="fas fa-cash-register"></i> Control de Caja
+                  </h4>
+                  <p>
+                    Utilice estas herramientas para auditar y cerrar las
+                    operaciones de venta del día. El
+                    <strong>Reporte X</strong> es una lectura sin efectos,
+                    mientras que el <strong>Reporte Z</strong> es un cierre
+                    definitivo.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="row mt-4 g-4">
+              <!-- Tarjeta para Reporte X -->
+              <div class="col-md-6">
+                <div class="card h-100 shadow-sm">
+                  <div class="card-body text-center">
+                    <i class="fas fa-search-dollar fa-3x text-primary mb-3"></i>
+                    <h5 class="card-title">Reporte X (Lectura Parcial)</h5>
+                    <p class="card-text">
+                      Genera una vista previa de las ventas totales, costos y
+                      ganancias desde el último cierre. Esta acción es solo
+                      informativa y no modifica ningún dato.
+                    </p>
+                    <button id="btnReporteX" class="btn btn-primary">
+                      <i class="fas fa-file-alt me-2"></i>Ver Lectura Parcial
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tarjeta para Reporte Z -->
+              <div class="col-md-6">
+                <div class="card h-100 shadow-sm border-danger">
+                  <div class="card-body text-center">
+                    <i class="fas fa-lock fa-3x text-danger mb-3"></i>
+                    <h5 class="card-title">Reporte Z (Cierre Definitivo)</h5>
+                    <p class="card-text">
+                      Finaliza el ciclo de ventas actual, registra los totales
+                      en el historial y marca todas las ventas como "Cerradas".
+                      Esta acción es irreversible.
+                    </p>
+                    <button id="btnReporteZ" class="btn btn-danger">
+                      <i class="fas fa-exclamation-triangle me-2"></i>Ejecutar
+                      Cierre Definitivo
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="sidebar.js"></script>
+    <script src="caja.js"></script>
+  </body>
+</html>

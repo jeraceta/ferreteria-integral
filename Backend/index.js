@@ -8,6 +8,10 @@ const clientesRoutes = require("./routers/clientes.routes");
 const productosRoutes = require("./routers/productos.routes");
 const ventasRoutes = require("./routers/ventas.routes");
 const inventarioRoutes = require("./routers/inventario.routes");
+const presupuestosRoutes = require("./routers/presupuestos.routes");
+const authRoutes = require("./routers/auth.routes");
+const categoriasRoutes = require("./routers/categorias.routes");
+const usuariosRoutes = require("./routers/usuarios.routes");
 // Si tienes compras, descomenta la línea de abajo
 // const comprasRoutes = require("./routers/compras.routes");
 
@@ -24,6 +28,10 @@ app.use("/api/clientes", clientesRoutes);
 app.use("/api/productos", productosRoutes);
 app.use("/api/ventas", ventasRoutes);
 app.use("/api/inventario", inventarioRoutes);
+app.use("/api/presupuestos", presupuestosRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/categorias", categoriasRoutes);
+app.use("/api/usuarios", usuariosRoutes);
 // app.use("/api/compras", comprasRoutes);
 
 // 4. MANEJO DE ERRORES GLOBAL

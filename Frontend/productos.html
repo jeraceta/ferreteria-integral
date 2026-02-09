@@ -1,25 +1,32 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gestión de Productos - Ferretería</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
     />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css"
+    />
     <link rel="stylesheet" href="styles.css" />
+    <script src="auth.js"></script>
     <style>
-        /* Cuando el modo cliente está activo en el body */
-        body.modo-cliente-activo .columna-acciones,
-        body.modo-cliente-activo #btnNuevoProducto {
-            display: none;
-        }
+      /* Cuando el modo cliente está activo en el body */
+      body.modo-cliente-activo .columna-acciones,
+      body.modo-cliente-activo #btnNuevoProducto {
+        display: none;
+      }
     </style>
-</head>
-<body class="bg-light">
+  </head>
+  <body class="bg-light">
     <div id="wrapper">
       <!-- Sidebar -->
       <nav id="sidebar" class="sidebar">
@@ -41,12 +48,30 @@
           >
             <i class="fas fa-boxes me-2"></i>Inventario
           </a>
-          <a href="#ventasSubmenu" data-bs-toggle="collapse" class="list-group-item list-group-item-action ventas-dropdown-toggle">
-              <i class="fas fa-shopping-cart me-2"></i>Ventas <i class="fas fa-chevron-down float-end"></i>
+          <a
+            href="#ventasSubmenu"
+            data-bs-toggle="collapse"
+            class="list-group-item list-group-item-action ventas-dropdown-toggle"
+          >
+            <i class="fas fa-shopping-cart me-2"></i>Ventas
+            <i class="fas fa-chevron-down float-end"></i>
           </a>
           <div class="collapse" id="ventasSubmenu">
-              <a href="ventas.html" class="list-group-item list-group-item-action sub-item"><i class="fas fa-cash-register me-2"></i>Facturación</a>
-              <a href="gestion-ventas.html" class="list-group-item list-group-item-action sub-item"><i class="fas fa-history me-2"></i>Historial y Devoluciones</a>
+            <a
+              href="ventas.html"
+              class="list-group-item list-group-item-action sub-item"
+              ><i class="fas fa-cash-register me-2"></i>Facturación</a
+            >
+            <a
+              href="gestion-ventas.html"
+              class="list-group-item list-group-item-action sub-item"
+              ><i class="fas fa-history me-2"></i>Historial y Devoluciones</a
+            >
+            <a
+              href="caja.html"
+              class="list-group-item list-group-item-action sub-item"
+              ><i class="fas fa-cash-register me-2"></i>Cierre de Caja</a
+            >
           </div>
           <a
             href="clientes.html"
@@ -60,6 +85,13 @@
           >
             <i class="fas fa-box me-2"></i>Productos
           </a>
+          <a
+            href="usuarios.html"
+            id="nav-usuarios"
+            class="list-group-item list-group-item-action"
+          >
+            <i class="fas fa-user-cog me-2"></i>Gestión de Usuarios
+          </a>
         </div>
       </nav>
 
@@ -70,108 +102,266 @@
             <h1 class="mb-4 text-center">Gestión de Productos</h1>
 
             <div class="card shadow-sm mb-4">
-                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                    <span class="me-auto">Listado de Productos</span>
-                    <div class="form-check form-switch me-3">
-                        <input class="form-check-input" type="checkbox" role="switch" id="modoClienteSwitch">
-                        <label class="form-check-label" for="modoClienteSwitch">Modo Cliente</label>
-                    </div>
-                    <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalProducto" id="btnNuevoProducto">
-                        Nuevo Producto
-                    </button>
+              <div
+                class="card-header bg-primary text-white d-flex justify-content-between align-items-center"
+              >
+                <span class="me-auto">Listado de Productos</span>
+                <div class="form-check form-switch me-3">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    role="switch"
+                    id="modoClienteSwitch"
+                  />
+                  <label class="form-check-label" for="modoClienteSwitch"
+                    >Modo Cliente</label
+                  >
                 </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <input type="text" class="form-control" id="inputBuscarProducto" placeholder="Buscar por Nombre o Categoría...">
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-striped">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Código</th>
-                                    <th>Nombre</th>
-                                    <th>Descripción</th>
-                                    <th>Categoría</th>
-                                    <th>Precio Venta</th>
-                                    <th>Stock Actual</th>
-                                    <th class="columna-acciones">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tablaProductos">
-                                <!-- Aquí se cargarán los productos -->
-                                <tr>
-                                    <td colspan="9" class="text-center">Cargando productos...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                <button
+                  type="button"
+                  class="btn btn-light btn-sm"
+                  data-bs-toggle="modal"
+                  data-bs-target="#modalProducto"
+                  id="btnNuevoProducto"
+                >
+                  Nuevo Producto
+                </button>
+              </div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="inputBuscarProducto"
+                    placeholder="Buscar por Nombre o Categoría..."
+                  />
                 </div>
+                <div class="table-responsive">
+                  <table class="table table-hover table-striped">
+                    <thead class="table-dark">
+                      <tr>
+                        <th>ID</th>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Marca</th>
+                        <th>Descripción</th>
+                        <th>Categoría</th>
+                        <th>Precio Venta</th>
+                        <th>Stock Actual</th>
+                        <th class="columna-acciones">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tablaProductos">
+                      <!-- Aquí se cargarán los productos -->
+                      <tr>
+                        <td colspan="9" class="text-center">
+                          Cargando productos...
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-    
+
             <!-- Modal Producto -->
-            <div class="modal fade" id="modalProducto" data-bs-focus="false" tabindex="-1" aria-labelledby="modalProductoLabel" aria-hidden="true">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header bg-primary text-white">
-                            <h5 class="modal-title" id="modalProductoLabel">Crear/Editar Producto</h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div
+              class="modal fade"
+              id="modalProducto"
+              data-bs-focus="false"
+              tabindex="-1"
+              aria-labelledby="modalProductoLabel"
+              aria-hidden="true"
+            >
+              <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                  <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalProductoLabel">
+                      Crear/Editar Producto
+                    </h5>
+                    <button
+                      type="button"
+                      class="btn-close btn-close-white"
+                      data-bs-dismiss="modal"
+                      aria-label="Close"
+                    ></button>
+                  </div>
+                  <div
+                    class="modal-body"
+                    style="padding-top: 0.5rem; padding-bottom: 0"
+                  >
+                    <form id="formProducto" autocomplete="off">
+                      <input type="hidden" id="productoId" />
+
+                      <!-- Fila 1: Código, Nombre, Marca -->
+                      <div class="row mb-2">
+                        <div class="col-md-4">
+                          <label for="codigo" class="form-label mb-1"
+                            >Código</label
+                          >
+                          <input
+                            type="text"
+                            class="form-control form-control-sm"
+                            id="codigo"
+                            required
+                            autocomplete="off"
+                          />
                         </div>
-                        <div class="modal-body">
-                            <form id="formProducto">
-                                <input type="hidden" id="productoId">
-                                <div class="row mb-3">
-                                    <div class="col-md-6">
-                                        <label for="codigo" class="form-label">Código</label>
-                                        <input type="text" class="form-control" id="codigo" required>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label for="nombre" class="form-label">Nombre</label>
-                                        <input type="text" class="form-control" id="nombre" required>
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="descripcion" class="form-label">Descripción</label>
-                                    <textarea class="form-control" id="descripcion" rows="3"></textarea>
-                                </div>
-                                <div class="row mb-3">
-                                    <div class="col-md-6">
-                                        <label for="selectCategoria" class="form-label">Categoría</label>
-                                        <div class="input-group">
-                                            <select class="form-select" id="selectCategoria" required>
-                                                <option value="">Seleccione una categoría</option>
-                                                <!-- Opciones de categorías se cargarán aquí -->
-                                            </select>
-                                            <button class="btn btn-success" type="button" id="btnAnadirCategoria" title="Añadir nueva categoría">+</button>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label for="stockActual" class="form-label">Stock Actual</label>
-                                        <input type="number" class="form-control" id="stockActual" min="0" required>
-                                    </div>
-                                </div>
-                                <div class="row mb-3">
-                                    <div class="col-md-4">
-                                        <label for="precioCosto" class="form-label">Precio Costo</label>
-                                        <input type="number" class="form-control" id="precioCosto" step="0.01" min="0" required>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label for="margenPorcentaje" class="form-label">Margen %</label>
-                                        <input type="number" class="form-control" id="margenPorcentaje" step="0.01" min="0">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label for="precioVenta" class="form-label">Precio Venta</label>
-                                        <input type="number" class="form-control" id="precioVenta" step="0.01" min="0" required>
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                    <button type="submit" class="btn btn-primary">Guardar Producto</button>
-                                </div>
-                            </form>
+                        <div class="col-md-4">
+                          <label for="nombre" class="form-label mb-1"
+                            >Nombre</label
+                          >
+                          <input
+                            type="text"
+                            class="form-control form-control-sm"
+                            id="nombre"
+                            required
+                            autocomplete="off"
+                          />
                         </div>
-                    </div>
+                        <div class="col-md-4">
+                          <label for="marca" class="form-label mb-1"
+                            >Marca</label
+                          >
+                          <input
+                            type="text"
+                            class="form-control form-control-sm"
+                            id="marca"
+                            placeholder="Ej: Stanley"
+                            autocomplete="off"
+                          />
+                        </div>
+                      </div>
+
+                      <!-- Fila 2: Categoría, Stock -->
+                      <div class="row mb-2">
+                        <div class="col-md-6">
+                          <label for="selectCategoria" class="form-label mb-1"
+                            >Categoría</label
+                          >
+                          <div class="input-group input-group-sm">
+                            <select
+                              class="form-select"
+                              id="selectCategoria"
+                              required
+                            >
+                              <option value="">Seleccione una categoría</option>
+                              <!-- Opciones se cargarán aquí -->
+                            </select>
+                            <button
+                              class="btn btn-success"
+                              type="button"
+                              id="btnAnadirCategoria"
+                              title="Añadir nueva categoría"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <div class="col-md-3">
+                          <label for="stockActual" class="form-label mb-1"
+                            >Stock Actual</label
+                          >
+                          <input
+                            type="number"
+                            class="form-control form-control-sm"
+                            id="stockActual"
+                            min="0"
+                            required
+                            autocomplete="off"
+                          />
+                        </div>
+                        <div class="col-md-3">
+                          <label for="stockMinimo" class="form-label mb-1"
+                            >Stock Mínimo</label
+                          >
+                          <input
+                            type="number"
+                            class="form-control form-control-sm"
+                            id="stockMinimo"
+                            placeholder="Ej: 5"
+                            min="0"
+                            autocomplete="off"
+                          />
+                        </div>
+                      </div>
+
+                      <!-- Fila 3: Descripción -->
+                      <div class="mb-2">
+                        <label for="descripcion" class="form-label mb-1"
+                          >Descripción</label
+                        >
+                        <textarea
+                          class="form-control form-control-sm"
+                          id="descripcion"
+                          rows="2"
+                          autocomplete="off"
+                        ></textarea>
+                      </div>
+
+                      <!-- Fila 4: Precios -->
+                      <div class="row mb-3">
+                        <div class="col-md-4">
+                          <label for="precioCosto" class="form-label mb-1"
+                            >Precio Costo</label
+                          >
+                          <input
+                            type="number"
+                            class="form-control form-control-sm"
+                            id="precioCosto"
+                            step="0.01"
+                            min="0"
+                            required
+                            autocomplete="off"
+                          />
+                        </div>
+                        <div class="col-md-4">
+                          <label for="margenPorcentaje" class="form-label mb-1"
+                            >Margen %</label
+                          >
+                          <input
+                            type="number"
+                            class="form-control form-control-sm"
+                            id="margenPorcentaje"
+                            step="0.01"
+                            min="0"
+                            autocomplete="off"
+                          />
+                        </div>
+                        <div class="col-md-4">
+                          <label for="precioVenta" class="form-label mb-1"
+                            >Precio Venta</label
+                          >
+                          <input
+                            type="number"
+                            class="form-control form-control-sm"
+                            id="precioVenta"
+                            step="0.01"
+                            min="0"
+                            required
+                            autocomplete="off"
+                          />
+                        </div>
+                      </div>
+                      <div
+                        class="modal-footer"
+                        style="padding-top: 0.5rem; padding-bottom: 0"
+                      >
+                        <button
+                          type="button"
+                          class="btn btn-secondary"
+                          data-bs-dismiss="modal"
+                        >
+                          Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                          Guardar Producto
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
+              </div>
             </div>
           </main>
         </div>
@@ -181,5 +371,5 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="sidebar.js"></script>
     <script src="productos.js"></script>
-</body>
+  </body>
 </html>

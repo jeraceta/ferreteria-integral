@@ -1,5 +1,16 @@
 document.addEventListener('DOMContentLoaded', async () => {
+    // Recuperamos el nombre real del usuario desde la base de datos para personalizar la experiencia
+    const user = JSON.parse(localStorage.getItem('user'));
     const token = localStorage.getItem('token');
+
+    if (user && user.nombre) {
+        document.getElementById('welcome-message').textContent = `¡Bienvenido, ${user.nombre}!`;
+    } else {
+        document.getElementById('welcome-message').textContent = '¡Bienvenido!';
+    }
+    if (user && user.rol) {
+        document.getElementById('user-role-display').textContent = user.rol;
+    }
     
     if (!token) {
         alert("No hay token detectado. Por favor, inicia sesión.");

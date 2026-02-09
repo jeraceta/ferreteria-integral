@@ -10,7 +10,7 @@ const obtenerProductoPorId = async (req, res, next) => {
   try {
     connection = await pool.getConnection();
     const [rows] = await connection.execute(
-      `SELECT p.*, c.nombre as nombre_categoria,
+      `SELECT p.*, c.nombre as nombre_categoria, p.marca,
              (SELECT cantidad FROM stock_depositos WHERE id_producto = p.id AND id_deposito = 1) as stock_actual,
              (SELECT cantidad FROM stock_depositos WHERE id_producto = p.id AND id_deposito = 1) as stock_principal,
              (SELECT cantidad FROM stock_depositos WHERE id_producto = p.id AND id_deposito = 2) as stock_dañado,
@@ -18,13 +18,15 @@ const obtenerProductoPorId = async (req, res, next) => {
              FROM productos p 
              LEFT JOIN categorias c ON p.id_categoria = c.id
              WHERE p.id = ?`,
-      [id]
+      [id],
     );
-    
+
     if (rows.length === 0) {
-      return res.status(404).json({ success: false, error: `Producto ${id} no encontrado.` });
+      return res
+        .status(404)
+        .json({ success: false, error: `Producto ${id} no encontrado.` });
     }
-    
+
     res.status(200).json(rows[0]);
   } catch (error) {
     next(error);
@@ -32,7 +34,6 @@ const obtenerProductoPorId = async (req, res, next) => {
     if (connection) connection.release();
   }
 };
-
 
 // 2. OBTENER TODOS LOS PRODUCTOS
 const obtenerTodosLosProductos = async (req, res, next) => {
@@ -44,6 +45,7 @@ const obtenerTodosLosProductos = async (req, res, next) => {
                 p.id, 
                 p.codigo, 
                 p.nombre, 
+                p.marca,
                 p.descripcion,
                 p.precio_venta, 
                 p.precio_costo, 
@@ -81,7 +83,8 @@ const realizarVenta = async (req, res, next) => {
   if (!id_producto || !cantidad_venta || cantidad_venta <= 0 || !id_usuario) {
     return res.status(400).json({
       success: false,
-      error: "Datos de venta incompletos o inválidos. Asegúrate de proporcionar id_producto, cantidad_venta y id_usuario.",
+      error:
+        "Datos de venta incompletos o inválidos. Asegúrate de proporcionar id_producto, cantidad_venta y id_usuario.",
     });
   }
 
@@ -95,7 +98,7 @@ const realizarVenta = async (req, res, next) => {
     // si múltiples ventas intentan acceder al mismo producto simultáneamente.
     const [rows] = await connection.execute(
       "SELECT stock_actual FROM stock_depositos WHERE id_producto = ? AND id_deposito = 1 FOR UPDATE",
-      [id_producto]
+      [id_producto],
     );
 
     const stockActual = rows.length > 0 ? rows[0].stock_actual : 0;
@@ -121,11 +124,16 @@ const realizarVenta = async (req, res, next) => {
 
     await connection.commit(); // Confirmar la transacción si todo fue exitoso
     console.log(`Venta exitosa para producto ${id_producto}.`);
-    res.status(200).json({ success: true, message: "Venta registrada y stock actualizado." });
+    res.status(200).json({
+      success: true,
+      message: "Venta registrada y stock actualizado.",
+    });
   } catch (error) {
     if (connection) {
       await connection.rollback(); // Revertir la transacción en caso de cualquier error
-      console.error(`Transacción de venta revertida debido a un error: ${error.message}`);
+      console.error(
+        `Transacción de venta revertida debido a un error: ${error.message}`,
+      );
     }
     next(error); // Pasar el error al siguiente middleware (manejador de errores global)
   } finally {
@@ -150,10 +158,17 @@ const realizarVenta = async (req, res, next) => {
 const procesarDevolucionInteligente = async (req, res, next) => {
   const { id_producto, cantidad, estado_producto, id_usuario } = req.body; // estado_producto: 'bueno' o 'danado'
 
-  if (!id_producto || !cantidad || cantidad <= 0 || !estado_producto || !id_usuario) {
+  if (
+    !id_producto ||
+    !cantidad ||
+    cantidad <= 0 ||
+    !estado_producto ||
+    !id_usuario
+  ) {
     return res.status(400).json({
       success: false,
-      error: "Datos de devolución incompletos o inválidos. Debe ser 'bueno' o 'danado'.",
+      error:
+        "Datos de devolución incompletos o inválidos. Debe ser 'bueno' o 'danado'.",
     });
   }
 
@@ -214,7 +229,8 @@ const moverAInmovilizado = async (req, res, next) => {
   if (!id_producto || !cantidad || cantidad <= 0 || !id_usuario) {
     return res.status(400).json({
       success: false,
-      error: "Datos de inmovilización incompletos o inválidos. Asegúrate de proporcionar id_producto, cantidad y id_usuario.",
+      error:
+        "Datos de inmovilización incompletos o inválidos. Asegúrate de proporcionar id_producto, cantidad y id_usuario.",
     });
   }
 
@@ -227,7 +243,7 @@ const moverAInmovilizado = async (req, res, next) => {
     // Es crucial validar que hay suficiente stock antes de intentar moverlo.
     const [rows] = await connection.execute(
       "SELECT stock_actual FROM stock_depositos WHERE id_producto = ? AND id_deposito = ? FOR UPDATE",
-      [id_producto, DEPOSITO_PRINCIPAL]
+      [id_producto, DEPOSITO_PRINCIPAL],
     );
 
     const stockActualPrincipal = rows.length > 0 ? rows[0].stock_actual : 0;
@@ -269,7 +285,7 @@ const moverAInmovilizado = async (req, res, next) => {
     if (connection) {
       await connection.rollback(); // Revertir ambos movimientos si algo falla
       console.error(
-        `Transacción de inmovilización revertida debido a un error: ${error.message}`
+        `Transacción de inmovilización revertida debido a un error: ${error.message}`,
       );
     }
     next(error);
@@ -285,7 +301,7 @@ async function obtenerTodasLasCategorias() {
   const connection = await pool.getConnection();
   try {
     const [rows] = await connection.execute(
-      "SELECT id, nombre FROM categorias ORDER BY nombre ASC"
+      "SELECT id, nombre FROM categorias ORDER BY nombre ASC",
     );
     return rows;
   } finally {
@@ -294,52 +310,89 @@ async function obtenerTodasLasCategorias() {
 }
 
 // 3. CREAR NUEVO PRODUCTO
-async function crearProducto(datos) {
+const crearProducto = async (req, res, next) => {
   let connection;
   try {
+    // Adaptamos la función para recibir (req, res, next). Ahora extraemos los datos de req.body,
+    // lo que soluciona el problema de que las variables llegaran undefined. También cambiamos
+    // los "throw" por "res.status(400)" para que el servidor no se apague si falta un dato.
+    const datos = req.body;
+
+    // Desestructuración con valores por defecto (Tu escudo protector)
+    const {
+      codigo,
+      nombre,
+      marca = null,
+      descripcion = "",
+      precio_venta = 0,
+      precio_costo = 0,
+      id_categoria = null,
+      stock = 0,
+      stock_minimo = 2,
+    } = datos;
+
+    // Validación básica para evitar el crash
+    if (!codigo || !nombre) {
+      // En lugar de throw, respondemos con error 400
+      return res.status(400).json({
+        message: "El código y el nombre del producto son obligatorios.",
+      });
+    }
+
     connection = await pool.getConnection();
     await connection.beginTransaction();
 
     // 1. VALIDACIÓN: Verificar si el código ya existe
     const [existe] = await connection.execute(
       "SELECT id FROM productos WHERE codigo = ?",
-      [datos.codigo]
+      [codigo],
     );
-
     if (existe.length > 0) {
-      // Si el código existe, lanzamos error y el catch hará el rollback
-      const err = new Error(`El código ${datos.codigo} ya está registrado.`);
-      err.status = 400;
-      throw err;
+      // Devolvemos un error 400 en lugar de crashear
+      return res
+        .status(400)
+        .json({ message: `El código ${codigo} ya está registrado.` });
     }
 
-    // 2. INSERTAR CABECERA: Crear el producto
-    const [resProd] = await connection.execute(
-      `INSERT INTO productos (codigo, nombre, precio_venta, precio_costo) VALUES (?, ?, ?, ?)`,
-      [
-        datos.codigo,
-        datos.nombre,
-        datos.precio_venta || 0,
-        datos.precio_costo || 0,
-      ]
-    );
+    // Lógica de INSERT con todas las columnas correctas
+    const sqlProd = `
+      INSERT INTO productos 
+      (codigo, nombre, marca, descripcion, precio_venta, precio_costo, id_categoria, stock_minimo, stock) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const [resProd] = await connection.execute(sqlProd, [
+      codigo,
+      nombre,
+      marca,
+      descripcion,
+      precio_venta,
+      precio_costo,
+      id_categoria,
+      stock_minimo,
+      stock,
+    ]);
+
     const nuevoId = resProd.insertId;
 
-    // 3. INSERTAR STOCK: Inicializar los 3 depósitos para este nuevo producto
-    const sqlStock = `INSERT INTO stock_depositos (id_producto, id_deposito, cantidad) VALUES (?, ?, ?)`;
-    await connection.execute(sqlStock, [nuevoId, 1, datos.stock || 0]); // Principal
-    await connection.execute(sqlStock, [nuevoId, 2, 0]); // Dañado
-    await connection.execute(sqlStock, [nuevoId, 3, 0]); // Inmovilizado
+    // Insertar Stock en los depósitos correspondientes
+    const sqlStock =
+      "INSERT INTO stock_depositos (id_producto, id_deposito, cantidad) VALUES (?, ?, ?)";
+    await connection.execute(sqlStock, [nuevoId, 1, stock]); // Depósito Principal
+    await connection.execute(sqlStock, [nuevoId, 2, 0]); // Depósito Dañado
+    await connection.execute(sqlStock, [nuevoId, 3, 0]); // Depósito Inmovilizado
 
     await connection.commit();
-    return { id: nuevoId, ...datos };
+
+    // RESPUESTA FINAL: Enviamos un 201 (Created) con el ID del nuevo producto
+    res
+      .status(201)
+      .json({ id: nuevoId, message: "Producto creado exitosamente" });
   } catch (error) {
     if (connection) await connection.rollback();
-    throw error;
+    next(error); // Pasamos cualquier otro error al manejador global de Express
   } finally {
     if (connection) connection.release();
   }
-}
+};
 
 // La función para procesar ventas ha sido movida a ventas.controller.js
 
@@ -388,7 +441,7 @@ async function procesarNuevaCompra(datosCompra, detallesProductos) {
         datosCompra.total || 0,
         datosCompra.metodoPago || "Efectivo",
         facturaReferencia,
-      ]
+      ],
     );
     const id_compra = compraResult.insertId;
 
@@ -405,24 +458,24 @@ async function procesarNuevaCompra(datosCompra, detallesProductos) {
           det.cantidad,
           det.costoUnitario,
           subtotalLinea,
-        ]
+        ],
       );
 
       // 🔄 ACTUALIZAR PRECIO_COSTO automáticamente con el nuevo costo del proveedor
       // Esto permite que el sistema refleje cambios de precios del proveedor
       await connection.execute(
         `UPDATE productos SET precio_costo = ? WHERE id = ?`,
-        [det.costoUnitario, det.productoId]
+        [det.costoUnitario, det.productoId],
       );
 
       // Bloquear fila de stock y actualizar
       await connection.execute(
         "SELECT cantidad FROM stock_depositos WHERE id_producto = ? AND id_deposito = 1 FOR UPDATE",
-        [det.productoId]
+        [det.productoId],
       );
       await connection.execute(
         `UPDATE stock_depositos SET cantidad = cantidad + ? WHERE id_producto = ? AND id_deposito = 1`,
-        [det.cantidad, det.productoId]
+        [det.cantidad, det.productoId],
       );
 
       // Registrar movimiento de inventario
@@ -434,7 +487,7 @@ async function procesarNuevaCompra(datosCompra, detallesProductos) {
           det.cantidad,
           id_compra,
           `Entrada por factura: ${facturaReferencia}. Costo actualizado a ${det.costoUnitario}`,
-        ]
+        ],
       );
     }
     await connection.commit();
@@ -484,7 +537,7 @@ async function obtenerGananciasTienda(fechaInicio, fechaFin) {
 async function obtenerVentasPorVendedor(
   fechaInicio,
   fechaFin,
-  porcentajeComision = 5
+  porcentajeComision = 5,
 ) {
   // Asegurarse que el valor es un número, si no, usar el default.
   const comisionValue = parseFloat(porcentajeComision) || 5;
@@ -556,7 +609,7 @@ async function registrarUsuario(datos) {
 
     const [res] = await connection.execute(
       `INSERT INTO usuarios (username, password, nombre, rol) VALUES (?, ?, ?, ?)`,
-      [datos.username, hashedPw, datos.nombre, datos.rol || "vendedor"]
+      [datos.username, hashedPw, datos.nombre, datos.rol || "vendedor"],
     );
     return { id: res.insertId, username: datos.username };
   } finally {
@@ -567,7 +620,7 @@ async function registrarUsuario(datos) {
 // OBTENER TODOS LOS USUARIOS
 async function obtenerUsuarios() {
   const [rows] = await pool.execute(
-    "SELECT id, username, nombre, rol, created_at FROM usuarios"
+    "SELECT id, username, nombre, rol, created_at FROM usuarios",
   );
   return rows;
 }
@@ -576,7 +629,7 @@ async function obtenerUsuarios() {
 async function actualizarUsuario(id, datos) {
   const [result] = await pool.execute(
     `UPDATE usuarios SET username = ?, nombre = ?, rol = ? WHERE id = ?`,
-    [datos.username, datos.nombre, datos.rol, id]
+    [datos.username, datos.nombre, datos.rol, id],
   );
   return result.affectedRows > 0;
 }
@@ -587,20 +640,6 @@ async function eliminarUsuario(id) {
     id,
   ]);
   return result.affectedRows > 0;
-}
-// OBTENER PRODUCTOS MÁS VENDIDOS
-async function obtenerLoMasVendido() {
-  const [rows] = await pool.execute(`
-        SELECT 
-            p.nombre AS producto,
-            (SELECT SUM(dv.cantidad) FROM detalle_ventas dv WHERE dv.id_producto = p.id) AS unidades_vendidas,
-            (SELECT SUM(dv.cantidad * dv.precio_unitario) FROM detalle_ventas dv WHERE dv.id_producto = p.id) AS total_recaudado
-        FROM productos p
-        GROUP BY p.id
-        ORDER BY total_recaudado DESC
-        LIMIT 5
-    `);
-  return rows;
 }
 
 // OBTENER TOP 10 PRODUCTOS MÁS VENDIDOS POR RANGO DE FECHA
@@ -646,7 +685,7 @@ async function obtenerProductosMasVendidos(fechaInicio, fechaFin) {
 async function loginUsuario(username, password) {
   const [rows] = await pool.execute(
     `SELECT id, username, password, nombre, rol FROM usuarios WHERE username = ?`,
-    [username]
+    [username],
   );
 
   if (rows.length === 0) {
@@ -678,7 +717,7 @@ async function obtenerKardexProducto(idProducto) {
     const [producto] = await connection.execute(
       `SELECT id, codigo, nombre, precio_venta, precio_costo 
              FROM productos WHERE id = ?`,
-      [idProducto]
+      [idProducto],
     );
 
     if (producto.length === 0) {
@@ -689,7 +728,7 @@ async function obtenerKardexProducto(idProducto) {
 
     const [stockActual] = await connection.execute(
       `SELECT cantidad FROM stock_depositos WHERE id_producto = ? AND id_deposito = 1`,
-      [idProducto]
+      [idProducto],
     );
 
     const [movimientos] = await connection.execute(
@@ -722,7 +761,7 @@ async function obtenerKardexProducto(idProducto) {
             FROM movimientos_inventario m
             WHERE m.id_producto = ?
             ORDER BY m.fecha_movimiento ASC`,
-      [idProducto]
+      [idProducto],
     );
 
     let stockAcumulado = 0;
@@ -764,7 +803,7 @@ async function procesarAjusteInventario(datos) {
     // 1. Obtener cantidad anterior
     const [actual] = await connection.execute(
       "SELECT cantidad FROM stock_depositos WHERE id_producto = ? AND id_deposito = ?",
-      [id_producto, id_deposito]
+      [id_producto, id_deposito],
     );
     const cantidadAnterior = actual[0]?.cantidad || 0;
     const diferencia =
@@ -773,7 +812,7 @@ async function procesarAjusteInventario(datos) {
     // 2. Actualizar stock
     await connection.execute(
       "UPDATE stock_depositos SET cantidad = cantidad + ? WHERE id_producto = ? AND id_deposito = ?",
-      [diferencia, id_producto, id_deposito]
+      [diferencia, id_producto, id_deposito],
     );
 
     // 3. Registrar en Kardex
@@ -781,7 +820,7 @@ async function procesarAjusteInventario(datos) {
       `INSERT INTO movimientos_inventario 
             (id_producto, tipo_movimiento, cantidad, comentario, referencia_tabla) 
             VALUES (?, ?, ?, ?, 'ajustes')`,
-      [id_producto, `AJUSTE_${tipo_ajuste}`, diferencia, motivo]
+      [id_producto, `AJUSTE_${tipo_ajuste}`, diferencia, motivo],
     );
 
     await connection.commit();
@@ -793,95 +832,6 @@ async function procesarAjusteInventario(datos) {
     connection.release();
   }
 }
-// --- FUNCION 1: REPORTE X (Solo lectura) ---
-const obtenerReporteX = async (req, res) => {
-  try {
-    const [reporte] = await pool.query(`
-            SELECT 
-                IFNULL(SUM(v.total), 0) as ingresos_totales,
-                IFNULL(SUM(dv.cantidad * p.precio_costo), 0) as costo_total_mercancia,
-                (IFNULL(SUM(v.total), 0) - IFNULL(SUM(dv.cantidad * p.precio_costo), 0)) as ganancia_neta
-            FROM ventas v
-            JOIN detalle_ventas dv ON v.id = dv.id_venta
-            JOIN productos p ON dv.id_producto = p.id
-            WHERE v.estado_cierre = 'PENDIENTE' -- <--- Importante: solo lo no cerrado
-        `);
-
-    res.json({
-      success: true,
-      tipo: "REPORTE X",
-      mensaje: "Lectura parcial de ventas acumuladas.",
-      datos: reporte[0],
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-// --- FUNCION 2: GENERAR CIERRE Z (Cierre definitivo) ---
-const generarCierreZ = async (req, res) => {
-  let connection;
-  try {
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
-
-    // 1. Obtener los totales actuales de las ventas PENDIENTES
-    const [totales] = await connection.execute(`
-            SELECT 
-                IFNULL(SUM(v.total), 0) as ingresos_totales,
-                IFNULL(SUM(dv.cantidad * p.precio_costo), 0) as costo_total_mercancia
-            FROM ventas v
-            JOIN detalle_ventas dv ON v.id = dv.id_venta
-            JOIN productos p ON dv.id_producto = p.id
-            WHERE v.estado_cierre = 'PENDIENTE'
-            FOR UPDATE
-        `);
-
-    const ingresos = parseFloat(totales[0].ingresos_totales);
-    const costos = parseFloat(totales[0].costo_total_mercancia);
-    const utilidad = ingresos - costos;
-
-    // Si no hay ventas, podemos decidir si cerrar en 0 o dar un error
-    if (ingresos === 0) {
-      await connection.rollback();
-      return res.status(400).json({
-        success: false,
-        error: "No hay ventas pendientes para realizar un cierre Z.",
-      });
-    }
-
-    // 2. Guardar en el historial de cierres
-    // Usamos req.user.id (asegúrate que el middleware 'requiereAuth' esté funcionando)
-    await connection.execute(
-      `INSERT INTO cierres_diarios (ingresos_totales, costo_mercancia, utilidad_neta, usuario_id) 
-             VALUES (?, ?, ?, ?)`,
-      [ingresos, costos, utilidad, req.user.id]
-    );
-
-    // 3. Marcar todas las ventas como cerradas
-    await connection.execute(`
-            UPDATE ventas 
-            SET estado_cierre = 'CERRADO' 
-            WHERE estado_cierre = 'PENDIENTE'
-        `);
-
-    const utilidadFormateada = parseFloat(utilidad.toFixed(2));
-
-    res.json({
-      success: true,
-      mensaje: "Reporte Z generado con éxito. La caja ha sido cerrada.",
-      cierre: {
-        total_venta: ingresos,
-        ganancia: utilidadFormateada, // <--- Usamos la variable formateada aquí
-      },
-    });
-  } catch (error) {
-    if (connection) await connection.rollback();
-    res.status(500).json({ success: false, error: error.message });
-  } finally {
-    if (connection) connection.release();
-  }
-};
 // --- FUNCION: OBTENER HISTORIAL DE CIERRES ---
 async function obtenerHistorialCierres() {
   const [rows] = await pool.execute(`
@@ -930,7 +880,7 @@ async function trasladarMercancia(
   idOrigen,
   idDestino,
   cantidad,
-  comentario = "Traslado interno"
+  comentario = "Traslado interno",
 ) {
   const connection = await pool.getConnection();
   try {
@@ -939,13 +889,13 @@ async function trasladarMercancia(
     // 1. Restar del origen
     const [restar] = await connection.execute(
       "UPDATE stock_depositos SET cantidad = cantidad - ? WHERE id_producto = ? AND id_deposito = ?",
-      [cantidad, idProducto, idOrigen]
+      [cantidad, idProducto, idOrigen],
     );
 
     // 2. Sumar al destino
     const [sumar] = await connection.execute(
       "UPDATE stock_depositos SET cantidad = cantidad + ? WHERE id_producto = ? AND id_deposito = ?",
-      [cantidad, idProducto, idDestino]
+      [cantidad, idProducto, idDestino],
     );
 
     // 3. Registrar el movimiento en el historial (Kardex)
@@ -957,7 +907,7 @@ async function trasladarMercancia(
         idProducto,
         0,
         `${comentario}: Movidas ${cantidad} unidades del depósito ${idOrigen} al ${idDestino}`,
-      ]
+      ],
     );
 
     await connection.commit();
@@ -977,20 +927,27 @@ async function actualizarProducto(id, datos) {
     // Validar que el código no lo tenga OTRO producto diferente al que estamos editando
     const [existe] = await connection.execute(
       "SELECT id FROM productos WHERE codigo = ? AND id != ?",
-      [datos.codigo, id]
+      [datos.codigo, id],
     );
 
     if (existe.length > 0) {
       throw new Error(
-        `El código ${datos.codigo} ya está siendo usado por otro producto.`
+        `El código ${datos.codigo} ya está siendo usado por otro producto.`,
       );
     }
 
     const [res] = await connection.execute(
       `UPDATE productos 
-             SET codigo = ?, nombre = ?, precio_venta = ?, precio_costo = ? 
+             SET codigo = ?, nombre = ?, marca = ?, precio_venta = ?, precio_costo = ? 
              WHERE id = ?`,
-      [datos.codigo, datos.nombre, datos.precio_venta, datos.precio_costo, id]
+      [
+        datos.codigo,
+        datos.nombre,
+        datos.marca,
+        datos.precio_venta,
+        datos.precio_costo,
+        id,
+      ],
     );
 
     await connection.commit();
@@ -1006,14 +963,14 @@ async function eliminarProducto(id) {
   // Primero verificamos si tiene movimientos para no romper la integridad
   const [movimientos] = await pool.execute(
     "SELECT id FROM movimientos_inventario WHERE id_producto = ? LIMIT 1",
-    [id]
+    [id],
   );
 
   if (movimientos.length > 0) {
     // Si tiene movimientos, solo lo desactivamos
     const [res] = await pool.execute(
       'UPDATE productos SET estado = "INACTIVO" WHERE id = ?',
-      [id]
+      [id],
     );
     return {
       success: true,
@@ -1032,8 +989,14 @@ async function procesarDevolucion(datosDevolucion) {
   // Capturamos los datos necesarios del cuerpo de la petición.
   // Es crucial obtener `id_deposito_destino` directamente desde `req.body`
   // para que el sistema respete la elección del usuario (Depósito Principal, Dañados, etc.).
-  const { id_venta, id_producto, cantidad, motivo, usuario_id, id_deposito_destino } =
-    datosDevolucion;
+  const {
+    id_venta,
+    id_producto,
+    cantidad,
+    motivo,
+    usuario_id,
+    id_deposito_destino,
+  } = datosDevolucion;
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -1042,21 +1005,27 @@ async function procesarDevolucion(datosDevolucion) {
     //    Es vital validar los IDs de depósitos que vienen de fuentes externas para prevenir
     //    intentos de manipulación o errores inesperados. Solo permitimos depósitos válidos.
     if (![1, 2].includes(id_deposito_destino)) {
-      throw new Error("ID de depósito de destino inválido para la devolución. Debe ser 1 (Principal) o 2 (Dañados).");
+      throw new Error(
+        "ID de depósito de destino inválido para la devolución. Debe ser 1 (Principal) o 2 (Dañados).",
+      );
     }
 
     // 1. Verificar que la venta y el producto existan en el detalle de la venta.
     const [detalle] = await connection.execute(
       "SELECT cantidad, precio_unitario FROM detalle_ventas WHERE id_venta = ? AND id_producto = ?",
-      [id_venta, id_producto]
+      [id_venta, id_producto],
     );
 
     if (detalle.length === 0) {
-      throw new Error("El producto no pertenece a la venta especificada o no existe.");
+      throw new Error(
+        "El producto no pertenece a la venta especificada o no existe.",
+      );
     }
 
     if (cantidad > detalle[0].cantidad) {
-      throw new Error("La cantidad a devolver supera la cantidad vendida de este producto.");
+      throw new Error(
+        "La cantidad a devolver supera la cantidad vendida de este producto.",
+      );
     }
 
     // 1. Eliminar actualizaciones manuales de productos.stock:
@@ -1075,7 +1044,11 @@ async function procesarDevolucion(datosDevolucion) {
       VALUES (?, ?, ?)
       ON DUPLICATE KEY UPDATE stock_actual = stock_actual + VALUES(stock_actual);
     `;
-    await connection.execute(upsertStockSql, [id_producto, id_deposito_destino, cantidad]);
+    await connection.execute(upsertStockSql, [
+      id_producto,
+      id_deposito_destino,
+      cantidad,
+    ]);
 
     // 3. Registro en Historial:
     //    El registro en la tabla `movimientos_inventario` DEBE marcar el `id_deposito_destino`
@@ -1085,15 +1058,20 @@ async function procesarDevolucion(datosDevolucion) {
     await connection.execute(
       `INSERT INTO movimientos_inventario (id_producto, id_deposito, tipo_movimiento, cantidad, referencia_id, referencia_tabla, comentario)
              VALUES (?, ?, 'DEVOLUCION_CLIENTE', ?, ?, 'ventas', ?)`,
-      [id_producto, id_deposito_destino, cantidad, id_venta, comentario]
+      [id_producto, id_deposito_destino, cantidad, id_venta, comentario],
     );
 
     await connection.commit();
-    return { success: true, mensaje: "Devolución procesada correctamente y stock actualizado." };
+    return {
+      success: true,
+      mensaje: "Devolución procesada correctamente y stock actualizado.",
+    };
   } catch (error) {
     if (connection) {
       await connection.rollback();
-      console.error(`Transacción de devolución revertida debido a un error: ${error.message}`);
+      console.error(
+        `Transacción de devolución revertida debido a un error: ${error.message}`,
+      );
     }
     throw error;
   } finally {
@@ -1150,32 +1128,33 @@ async function obtenerGananciasPorCategoria() {
 }
 
 const buscarProductosPredictivo = async (req, res, next) => {
-    const { termino } = req.query;
-    if (!termino || termino.length < 2) {
-        return res.status(400).json({ error: 'El término de búsqueda debe tener al menos 2 caracteres.' });
-    }
+  const { termino } = req.query;
+  if (!termino || termino.length < 2) {
+    return res.status(400).json({
+      error: "El término de búsqueda debe tener al menos 2 caracteres.",
+    });
+  }
 
-    let connection;
-    try {
-        connection = await pool.getConnection();
-        const [rows] = await connection.execute(
-            `SELECT p.id, p.codigo, p.nombre, p.precio_venta, sd.cantidad as stock 
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    const [rows] = await connection.execute(
+      `SELECT p.id, p.codigo, p.nombre, p.marca, p.precio_venta, p.precio_costo, p.descripcion, sd.cantidad as stock 
              FROM productos p
              JOIN stock_depositos sd ON p.id = sd.id_producto
-             WHERE sd.id_deposito = 1 AND (p.nombre LIKE ? OR p.codigo LIKE ?)
+             WHERE sd.id_deposito = 1 AND (p.nombre LIKE ? OR p.codigo LIKE ? OR p.marca LIKE ?)
              LIMIT 10`,
-            [`%${termino}%`, `%${termino}%`]
-        );
-        res.json(rows);
-    } catch (error) {
-        next(error);
-    } finally {
-        if (connection) connection.release();
-    }
+      [`%${termino}%`, `%${termino}%`, `%${termino}%`],
+    );
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  } finally {
+    if (connection) connection.release();
+  }
 };
 
 module.exports = {
-
   procesarNuevaCompra,
   obtenerProductoPorId,
   obtenerTodosLosProductos,
@@ -1193,11 +1172,8 @@ module.exports = {
   obtenerUsuarios,
   actualizarUsuario,
   eliminarUsuario,
-  obtenerLoMasVendido,
   loginUsuario,
   obtenerKardexProducto,
-  generarCierreZ,
-  obtenerReporteX,
   obtenerHistorialCierres,
   obtenerReporteTomaFisica,
   obtenerVentasMensuales,

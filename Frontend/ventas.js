@@ -1,3 +1,4 @@
+// Integramos la visualización de la Marca en el proceso de venta y facturación para garantizar transparencia con el cliente, ajustando los estilos CSS para mantener la interfaz compacta y funcional.
 document.addEventListener("DOMContentLoaded", () => {
   console.log("Sistema de Ventas Iniciado");
   // --- CAPTURA DE ELEMENTOS DEL DOM ---
@@ -29,11 +30,57 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- VARIABLES DE ESTADO ---
   let clienteActual = null;
+  let productosEnVenta = []; // Array para almacenar los objetos completos de los productos en la venta
   const API_CLIENTES_URL = "http://localhost:3000/api/clientes";
   const API_VENTAS_URL = "http://localhost:3000/api/ventas";
   const API_PRODUCTOS_URL = "http://localhost:3000/api/productos";
 
   // --- DEFINICIÓN DE FUNCIONES ---
+
+  /**
+   * @description Muestra los detalles completos de un producto en un modal.
+   * @param {number} index El índice del producto en el array `productosEnVenta`.
+   */
+  window.verDetalleProducto = function(index) {
+    const producto = productosEnVenta[index];
+    if (!producto) {
+        console.error("No se encontró el producto en el índice:", index);
+        Swal.fire("Error", "No se pudo encontrar la información del producto.", "error");
+        return;
+    }
+
+    const htmlContent = `
+        <div style="text-align: left; padding: 1rem;">
+            <p style="font-size: 1.2rem; margin-bottom: 0.5rem;">
+                <strong >Producto:</strong> ${producto.nombre} 
+                <span class="badge bg-secondary" style="font-size: 0.9rem; vertical-align: middle;">${producto.marca || 'Genérico'}</span>
+            </p>
+            <p style="font-size: 1rem; color: #555;"><strong>Código:</strong> ${producto.codigo}</p>
+            <hr>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 1rem; font-size: 1.1rem;">
+                <p><strong>💰 Precio Venta:</strong> <span style="color: #28a745;">$${parseFloat(producto.precio_venta).toFixed(2)}</span></p>
+                <p style="color: #d63384;"><strong>🔐 Costo Interno:</strong> $${parseFloat(producto.precio_costo).toFixed(2)}</p>
+            </div>
+            <p style="font-size: 1rem;"><strong>📦 Stock Disponible:</strong> ${producto.stock} unidades</p>
+            <hr>
+            <p style="font-size: 1rem;"><strong>📝 Descripción:</strong></p>
+            <p style="font-style: italic; color: #6c757d; background-color: #f8f9fa; padding: 0.5rem; border-radius: 5px;">
+                ${producto.descripcion || 'Sin descripción detallada.'}
+            </p>
+        </div>
+    `;
+
+    Swal.fire({
+        title: 'Ficha Técnica del Producto',
+        html: htmlContent,
+        confirmButtonText: 'Cerrar',
+        width: '50%',
+        customClass: {
+            title: 'swal2-title-custom',
+            htmlContainer: 'swal2-html-container-custom'
+        }
+    });
+  }
 
   /**
    * @description Esta función se encarga de mostrar u ocultar el campo de 'Referencia'.
@@ -228,6 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         limpiarCamposCliente();
         productosVentaBody.innerHTML = "";
+        productosEnVenta = []; // Limpiar el array de productos en memoria
         fleteInput.value = "0"; // Resetear flete
         metodoPagoSelect.value = "Efectivo"; // Resetear método de pago
         gestionarVisibilidadReferencia(); // Ocultar referencia
@@ -264,6 +312,7 @@ document.addEventListener("DOMContentLoaded", () => {
     clienteEmailInput.value = "";
     tipoContribuyenteSelect.value = "Ordinario";
     clienteActual = null;
+    productosEnVenta = []; // Limpiar el array de productos en venta
     toggleClientFieldsReadOnly(false);
     clienteRifCedulaInput.focus();
   }
@@ -399,15 +448,27 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       return;
     }
+    // 1. Guardar el objeto completo en el array de la venta actual.
+    productosEnVenta.push(producto);
+    const index = productosEnVenta.length - 1;
+
     const fila = document.createElement("tr");
     fila.setAttribute("data-producto-id", producto.id);
     fila.innerHTML = `
         <td>${producto.codigo}</td>
         <td>${producto.nombre}</td>
+        <td>${producto.marca || '-'}</td>
         <td class="precio-producto-celda" style="cursor: pointer;" title="Doble clic para editar"><span>${parseFloat(producto.precio_venta).toFixed(2)}</span></td>
         <td><input type="number" class="form-control form-control-sm cantidad-producto" value="1" min="1" max="${producto.stock}" data-precio="${producto.precio_venta}" data-stock="${producto.stock}" style="width: 70px;"></td>
         <td class="subtotal-producto">${parseFloat(producto.precio_venta).toFixed(2)}</td>
-        <td><button class="btn btn-danger btn-sm eliminar-producto"><i class="fas fa-trash"></i></button></td>
+        <td>
+            <button class="btn btn-info btn-sm" onclick="verDetalleProducto(${index})" title="Ver detalles">
+                <i class="fas fa-info-circle"></i>
+            </button>
+            <button class="btn btn-danger btn-sm eliminar-producto" data-id="${producto.id}" title="Eliminar">
+                <i class="fas fa-trash"></i>
+            </button>
+        </td>
     `;
     tablaBody.appendChild(fila);
 
@@ -444,6 +505,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (confirmacion.isConfirmed) {
                     span.textContent = nuevoPrecio.toFixed(2);
                     cantidadInput.dataset.precio = nuevoPrecio.toFixed(2);
+                    // Actualizar el precio en el array en memoria
+                    productosEnVenta[index].precio_venta = nuevoPrecio.toFixed(2);
                     actualizarTotales();
                 }
             }
@@ -476,11 +539,35 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       actualizarTotales();
     });
-    fila.querySelector(".eliminar-producto").addEventListener("click", () => {
-      fila.remove();
-      actualizarTotales();
+    
+    fila.querySelector(".eliminar-producto").addEventListener("click", (e) => {
+        const idParaEliminar = e.currentTarget.getAttribute('data-id');
+        const indiceParaEliminar = productosEnVenta.findIndex(p => p.id == idParaEliminar);
+
+        if (indiceParaEliminar > -1) {
+            productosEnVenta.splice(indiceParaEliminar, 1);
+            // Volver a renderizar la tabla para re-calcular los índices
+            renderizarTablaVenta(); 
+        } else {
+             // Si no se encuentra, simplemente removemos la fila (comportamiento fallback)
+            e.currentTarget.closest('tr').remove();
+        }
+        actualizarTotales();
     });
+
     actualizarTotales();
+  }
+
+  /**
+   * @description Renderiza de nuevo toda la tabla de productos en venta.
+   * Es útil cuando se elimina un producto para re-calcular los índices.
+   */
+  function renderizarTablaVenta() {
+    const tablaBody = document.getElementById("productosVentaBody");
+    tablaBody.innerHTML = ''; // Limpiar la tabla
+    const productosCopia = [...productosEnVenta]; // Crear copia para no mutar el array original
+    productosEnVenta = []; // Limpiar el array principal
+    productosCopia.forEach(p => agregarProductoATabla(p)); // Volver a agregar cada producto
   }
 
   function seleccionarProducto(producto) {
@@ -501,7 +588,26 @@ document.addEventListener("DOMContentLoaded", () => {
     productos.forEach((producto) => {
       const item = document.createElement("div");
       item.classList.add("sugerencia-item");
-      item.textContent = `${producto.codigo} - ${producto.nombre} (Stock: ${producto.stock})`;
+
+      // Formatear precio con separadores de miles y dos decimales
+      const precioFormateado = new Intl.NumberFormat('es-VE', {
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+      }).format(producto.precio_venta);
+
+      // Misión: Maquetación con alineación de extremos y separadores.
+      item.innerHTML = `
+        <div class="sugerencia-bloque-izquierdo">
+            <span class="sugerencia-codigo">${producto.codigo}</span>
+            <span class="sugerencia-nombre">${producto.nombre}</span>
+            ${producto.marca ? '<span class="sugerencia-separador">•</span>' : ''}
+            <span class="sugerencia-marca">${producto.marca || ''}</span>
+        </div>
+        <div class="sugerencia-bloque-derecho">
+            <span class="sugerencia-precio">$ ${precioFormateado}</span>
+            <span class="sugerencia-stock">Stock: ${producto.stock}</span>
+        </div>
+      `;
       
       if (producto.stock <= 0) {
         item.classList.add("disabled-suggestion");
@@ -577,3 +683,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
   console.log("✅ Conexión exitosa: Listeners de Ventas activos");
 });
+
