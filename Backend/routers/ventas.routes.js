@@ -11,11 +11,17 @@ const { requiereAuth, esAdmin } = require("../middlewares/auth.middleware");
 // --- DEFINICIÓN DE RUTAS PARA VENTAS ---
 
 // Ruta para procesar una nueva venta
-router.post("/procesar", requiereAuth, ventasController.procesarVenta);
+router.post("/registrar", requiereAuth, ventasController.procesarVenta);
+// Ruta para buscar historial de ventas por cédula/RIF del cliente
+router.get(
+  "/buscar-por-cedula/:cedula",
+  requiereAuth,
+  ventasController.buscarVentasPorCedula,
+);
 // Ruta para obtener la última tasa de cambio
 router.get("/tasa-bcv", requiereAuth, ventasController.obtenerUltimaTasa);
 // Ruta para generar el reporte PDF de una venta
-router.get("/reporte-pdf/:id", requiereAuth, ventasController.generarReporte);
+router.get("/reporte/:id", requiereAuth, ventasController.generarComprobante);
 // Rutas para la gestión de devoluciones
 router.get(
   "/motivos-devolucion",
@@ -27,10 +33,24 @@ router.post(
   requiereAuth,
   ventasController.procesarDevolucion,
 );
+// Ruta para anular una venta y restaurar inventario
+router.put("/anular/:id", requiereAuth, ventasController.anularVenta);
+// Ruta para obtener los detalles originales de una venta (para devoluciones)
+router.get(
+  "/:id/original-detalles",
+  requiereAuth,
+  ventasController.obtenerDetallesVenta,
+);
 router.get(
   "/devolucion-pdf/:id",
   requiereAuth,
   ventasController.generarPDFDevolucion,
+);
+// Ruta para generar el reporte de devolución (PDF)
+router.get(
+  "/reporte-devolucion/:id",
+  requiereAuth,
+  ventasController.generarReporteDevolucion,
 );
 // Rutas para el control de caja (Reporte X y Z)
 router.get("/reporte-x", requiereAuth, ventasController.obtenerReporteX);

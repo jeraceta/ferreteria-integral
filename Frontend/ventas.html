@@ -310,52 +310,6 @@
                             step="0.01"
                           />
                         </div>
-                        <div class="form-group">
-                          <label for="metodoPagoSelect" class="form-label-sm"
-                            >Método de Pago</label
-                          >
-                          <select
-                            id="metodoPagoSelect"
-                            class="form-select form-control-sm"
-                          >
-                            <option value="Efectivo" selected>Efectivo</option>
-                            <option value="Tarjeta">
-                              Tarjeta de Débito/Crédito
-                            </option>
-                            <option value="Transferencia">
-                              Transferencia Bancaria
-                            </option>
-                            <option value="PagoMovil">Pago Móvil</option>
-                          </select>
-                        </div>
-                        <div
-                          class="form-group mt-2"
-                          id="campoReferencia"
-                          style="display: none"
-                        >
-                          <label for="referenciaInput" class="form-label-sm"
-                            >Referencia</label
-                          >
-                          <input
-                            type="text"
-                            id="referenciaInput"
-                            class="form-control form-control-sm"
-                            placeholder="Nro. de referencia"
-                          />
-                        </div>
-                        <div class="form-group mt-2">
-                          <label for="fleteInput" class="form-label-sm"
-                            >Flete / Delivery ($)</label
-                          >
-                          <input
-                            type="number"
-                            id="fleteInput"
-                            class="form-control form-control-sm"
-                            value="0"
-                            min="0"
-                            step="0.01"
-                          />
-                        </div>
                       </div>
                       <div class="col-lg-8 text-md-end">
                         <table
@@ -369,15 +323,6 @@
                               </td>
                               <td class="fs-5 text-muted">
                                 ($<span id="subtotalVenta">0.00</span>)
-                              </td>
-                            </tr>
-                            <tr>
-                              <td class="fs-5">Flete / Delivery:</td>
-                              <td class="fs-5 fw-bold">
-                                <span id="fleteVentaBS">0.00</span> Bs
-                              </td>
-                              <td class="fs-5 text-muted">
-                                ($<span id="fleteVenta">0.00</span>)
                               </td>
                             </tr>
                             <tr id="ivaRow">
@@ -410,10 +355,11 @@
                     </div>
                     <div class="d-grid mt-3">
                       <button
-                        class="btn btn-success btn-lg"
-                        id="procesarVentaBtn"
+                        type="button"
+                        class="btn btn-primary w-100 btn-lg"
+                        onclick="abrirModalTotalizar()"
                       >
-                        PROCESAR VENTA
+                        💰 TOTALIZAR (F3)
                       </button>
                     </div>
                   </div>
@@ -421,6 +367,137 @@
               </div>
             </div>
           </main>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Totalización -->
+    <div
+      class="modal fade"
+      id="modalTotalizar"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">Totalizar Venta</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body p-3">
+            <div class="row">
+              <!-- Columna Izquierda: Inputs de Pago -->
+              <div class="col-md-6 border-end pe-4">
+                <div class="alert alert-info text-center p-2">
+                  Tasa del Sistema: <strong id="tasaModal">0.00</strong> Bs/$
+                </div>
+                <h4 class="mb-3">Registrar Pago</h4>
+                <div class="mb-3">
+                  <label class="form-label-sm">Método</label>
+                  <select class="form-select" id="selectMetodoPago">
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Punto de Venta">Punto de Venta</option>
+                    <option value="Pago Móvil">Pago Móvil</option>
+                    <option value="Divisas">Divisas ($)</option>
+                    <option value="Transferencia">Transferencia</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label-sm">Monto</label>
+                  <div class="input-group">
+                    <span class="input-group-text">$</span>
+                    <input
+                      type="number"
+                      class="form-control"
+                      id="inputMontoDolares"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <input
+                    type="number"
+                    class="form-control mt-2"
+                    id="inputMontoBolivares"
+                    placeholder="0.00 Bs"
+                  />
+                </div>
+                <div class="mb-3">
+                  <label class="form-label-sm">Referencia (Opcional)</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="inputReferenciaPago"
+                  />
+                </div>
+                <button class="btn btn-success w-100" onclick="agregarPago()">
+                  ➕ Agregar Pago (Enter)
+                </button>
+              </div>
+
+              <!-- Columna Derecha: Resumen y Pagos -->
+              <div class="col-md-6 ps-4">
+                <div
+                  class="d-flex justify-content-between align-items-center bg-light p-2 rounded mb-2"
+                >
+                  <div>
+                    <label class="form-label-sm d-block">Total a Pagar</label>
+                    <h4 class="text-success mb-0" id="txtTotalPagarDolares">
+                      $0.00
+                    </h4>
+                  </div>
+                  <div>
+                    <label class="form-label-sm d-block text-end"
+                      >Restante</label
+                    >
+                    <h4 class="text-danger mb-0" id="txtRestanteDolares">
+                      $0.00
+                    </h4>
+                  </div>
+                </div>
+                <table class="table table-sm table-striped">
+                  <thead>
+                    <tr>
+                      <th>Método</th>
+                      <th>Ref</th>
+                      <th>Monto</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="tablaPagosAgregados"></tbody>
+                </table>
+                <hr class="my-2" />
+                <div class="d-flex justify-content-between">
+                  <h6>Abonado (Bs):</h6>
+                  <h6 class="text-success" id="txtTotalAbonado">0.00 Bs</h6>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <h6>Restante (Bs):</h6>
+                  <h6 class="text-danger" id="txtRestante">0.00 Bs</h6>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="btnFinalizarVenta"
+              onclick="procesarVentaFinal()"
+              disabled
+            >
+              ✅ CONFIRMAR IMPRESIÓN
+            </button>
+          </div>
         </div>
       </div>
     </div>

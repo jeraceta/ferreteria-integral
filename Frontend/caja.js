@@ -62,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const fecha = new Date().toLocaleString("es-VE");
 
     let desgloseHtml =
-      '<h4>Desglose por Método de Pago</h4><table class="table table-sm"><tbody>';
+      '<h4>Detalle de Medios de Pago</h4><table class="table table-sm"><tbody>';
     if (datos.desglose_pagos && datos.desglose_pagos.length > 0) {
       datos.desglose_pagos.forEach((pago) => {
         desgloseHtml += `<tr><td>${pago.metodo_pago}</td><td class="text-end">${parseFloat(pago.total).toFixed(2)} $</td></tr>`;

@@ -56,27 +56,28 @@ document.addEventListener("DOMContentLoaded", function () {
         });
         return Promise.reject(new Error("Unauthorized"));
       }
-      
+
       const contentType = response.headers.get("content-type");
       if (!response.ok) {
         let errorData;
         if (contentType && contentType.includes("application/json")) {
-           errorData = await response.json();
+          errorData = await response.json();
         } else {
-           errorData = { message: await response.text() };
+          errorData = { message: await response.text() };
         }
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        throw new Error(
+          errorData.message || `HTTP error! status: ${response.status}`,
+        );
       }
 
       if (contentType && contentType.includes("application/json")) {
         return response.json();
       }
       return response; // Return the whole response for non-JSON types (like blobs)
-    
     } catch (error) {
-        // Rethrow network errors or errors from the fetch call itself
-        console.error('Fetch Error:', error);
-        throw error;
+      // Rethrow network errors or errors from the fetch call itself
+      console.error("Fetch Error:", error);
+      throw error;
     }
   }
 
@@ -100,7 +101,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const devolucionModal = new bootstrap.Modal(devolucionModalElement);
   const motivoDevolucionSelect = document.getElementById("motivoDevolucion");
   const ventaIdDevolucionInput = document.getElementById(
-    "ventaIdDevolucionInput"
+    "ventaIdDevolucionInput",
   );
   const modalVentaInfo = document.getElementById("modalVentaInfo");
   const modalVentaItemsBody = document.getElementById("modalVentaItemsBody");
@@ -147,7 +148,7 @@ document.addEventListener("DOMContentLoaded", function () {
       Swal.fire(
         "Atención",
         "Por favor, ingrese una Cédula o RIF para buscar.",
-        "warning"
+        "warning",
       );
       return;
     }
@@ -163,13 +164,17 @@ document.addEventListener("DOMContentLoaded", function () {
       const url = `${BASE_API_URL}/api/ventas/buscar-por-cedula/${lastSearchedCedula}?page=${currentPage}&limit=${itemsPerPage}`;
       const respuestaBackend = await secureFetch(url);
 
-      const ventas = Array.isArray(respuestaBackend)
-        ? respuestaBackend
-        : respuestaBackend.ventas || [];
-      allVentas = ventas;
+      console.log("Respuesta cruda del servidor:", respuestaBackend);
 
-      totalPages = Array.isArray(respuestaBackend) ? 1 : respuestaBackend.totalPages || 1;
-      currentPage = Array.isArray(respuestaBackend) ? 1 : respuestaBackend.currentPage || 1;
+      // Nota del Aprendiz: // Solucionamos el error de visualización. El servidor ya entrega los datos correctamente, así que ajustamos el Frontend para que sepa 'desempaquetar' el objeto JSON correctamente (leyendo la propiedad .data) y renderice la tabla de historial.
+      const ventas = respuestaBackend.data || respuestaBackend;
+      allVentas = Array.isArray(ventas) ? ventas : [];
+
+      if (respuestaBackend.total) {
+        totalPages = Math.ceil(respuestaBackend.total / itemsPerPage);
+      } else {
+        totalPages = 1;
+      }
 
       if (allVentas.length > 0) {
         renderVentas(allVentas);
@@ -180,11 +185,14 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     } catch (error) {
       console.error("Error al buscar ventas:", error);
-      if (error.message !== 'Unauthorized' && error.message !== 'No token found') {
+      if (
+        error.message !== "Unauthorized" &&
+        error.message !== "No token found"
+      ) {
         Swal.fire(
           "Error",
           error.message || "Hubo un problema al buscar las ventas.",
-          "error"
+          "error",
         );
       }
       noResultsMessage.classList.remove("d-none");
@@ -230,15 +238,15 @@ document.addEventListener("DOMContentLoaded", function () {
       row.innerHTML = `
                 <td>${venta.numero_control || "Pendiente"}</td>
                 <td>${displayValue(
-                  new Date(venta.fecha_venta).toLocaleDateString()
+                  new Date(venta.fecha_venta).toLocaleDateString(),
                 )}</td>
                 <td>${displayValue(venta.subtotal, true, "$")}</td>
                 <td>${displayValue(venta.impuesto, true, "$")}</td>
                 <td>${displayValue(venta.total, true, "$")}</td>
                 <td>${displayValue(venta.total_bolivares, true, "Bs")}</td>
                 <td><span class="${estadoClass}">${displayValue(
-        venta.estado
-      )}</span></td>
+                  venta.estado,
+                )}</span></td>
                 <td>
                     <button class="btn btn-sm btn-primary view-pdf-btn" data-id="${
                       venta.id
@@ -248,19 +256,21 @@ document.addEventListener("DOMContentLoaded", function () {
                     <button type="button" class="btn btn-sm btn-danger cancel-sale-btn" data-id="${
                       venta.id
                     }" ${
-        estadoNormalizado === "devuelta" || estadoNormalizado === "anulada"
-          ? "disabled"
-          : ""
-      } style="cursor: pointer;" title="Anular Venta">
+                      estadoNormalizado === "devuelta" ||
+                      estadoNormalizado === "anulada"
+                        ? "disabled"
+                        : ""
+                    } style="cursor: pointer;" title="Anular Venta">
                         <i class="fas fa-ban"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-warning return-sale-btn" data-id="${
                       venta.id
                     }" ${
-        estadoNormalizado === "devuelta" || estadoNormalizado === "anulada"
-          ? "disabled"
-          : ""
-      } style="cursor: pointer;" title="Procesar Devolución">
+                      estadoNormalizado === "devuelta" ||
+                      estadoNormalizado === "anulada"
+                        ? "disabled"
+                        : ""
+                    } style="cursor: pointer;" title="Procesar Devolución">
                         <i class="fas fa-undo-alt"></i>
                     </button>
                 </td>
@@ -298,7 +308,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const motivoSelect = document.getElementById("motivoDevolucion");
     try {
       const motivos = await secureFetch(
-        `${BASE_API_URL}/api/ventas/motivos-devolucion`
+        `${BASE_API_URL}/api/ventas/motivos-devolucion`,
       );
       motivoSelect.innerHTML =
         '<option value="" selected disabled>Seleccione un motivo...</option>';
@@ -310,80 +320,100 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     } catch (error) {
       console.error("Error al cargar motivos:", error);
-       if (error.message !== 'Unauthorized' && error.message !== 'No token found') {
+      if (
+        error.message !== "Unauthorized" &&
+        error.message !== "No token found"
+      ) {
         motivoSelect.innerHTML =
-            '<option value="" selected disabled>Error al cargar motivos</option>';
+          '<option value="" selected disabled>Error al cargar motivos</option>';
         motivoSelect.disabled = true;
       }
     }
   }
 
-    // --- LÓGICA DE ACCIONES EN LA TABLA (Ver PDF y Devolución) ---
-    document.getElementById('ventasTableBody').addEventListener('click', async function(e) {
-    const viewBtn = e.target.closest('.view-pdf-btn');
-    if (viewBtn) {
+  // --- LÓGICA DE ACCIONES EN LA TABLA (Ver PDF y Devolución) ---
+  document
+    .getElementById("ventasTableBody")
+    .addEventListener("click", async function (e) {
+      const viewBtn = e.target.closest(".view-pdf-btn");
+      if (viewBtn) {
         const ventaId = viewBtn.dataset.id;
         try {
-            const response = await secureFetch(`${BASE_API_URL}/api/ventas/reporte/${ventaId}`);
-            const blob = await response.blob();
-            const pdfUrl = URL.createObjectURL(blob);
-            window.open(pdfUrl, '_blank');
-            setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000); // Clean up the object URL after 1 minute
+          const response = await secureFetch(
+            `${BASE_API_URL}/api/ventas/reporte/${ventaId}`,
+          );
+          const blob = await response.blob();
+          const pdfUrl = URL.createObjectURL(blob);
+          window.open(pdfUrl, "_blank");
+          setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000); // Clean up the object URL after 1 minute
         } catch (error) {
-            console.error('Error fetching PDF:', error);
-            if (error.message !== 'Unauthorized' && error.message !== 'No token found') {
-                Swal.fire('Error', 'No se pudo generar el reporte en PDF.', 'error');
-            }
+          console.error("Error fetching PDF:", error);
+          if (
+            error.message !== "Unauthorized" &&
+            error.message !== "No token found"
+          ) {
+            Swal.fire(
+              "Error",
+              "No se pudo generar el reporte en PDF.",
+              "error",
+            );
+          }
         }
         return;
-    }
+      }
 
-    const returnBtn = e.target.closest('.return-sale-btn');
-    if (returnBtn) {
+      const returnBtn = e.target.closest(".return-sale-btn");
+      if (returnBtn) {
         const ventaId = returnBtn.dataset.id;
         await abrirModalDevolucion(ventaId);
-    }
+      }
 
-    const cancelBtn = e.target.closest('.cancel-sale-btn');
-    if (cancelBtn) {
+      const cancelBtn = e.target.closest(".cancel-sale-btn");
+      if (cancelBtn) {
         const ventaId = cancelBtn.dataset.id;
         handleAnularVenta(ventaId);
-    }
-  });
+      }
+    });
 
   async function handleAnularVenta(ventaId) {
     const result = await Swal.fire({
-        title: '¿Estás seguro?',
-        text: "Esta acción anulará la venta y restaurará el stock. ¡No podrás revertir esto!",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Sí, ¡anular!',
-        cancelButtonText: 'No, cancelar'
+      title: "¿Estás seguro?",
+      text: "Esta acción anulará la venta y restaurará el stock. ¡No podrás revertir esto!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Sí, ¡anular!",
+      cancelButtonText: "No, cancelar",
     });
 
     if (result.isConfirmed) {
-        try {
-            const response = await secureFetch(`${BASE_API_URL}/api/ventas/anular/${ventaId}`, {
-                method: 'PUT'
-            });
-            Swal.fire(
-                '¡Anulada!',
-                response.message || 'La venta ha sido anulada.',
-                'success'
-            );
-            buscarVentasPorCedula(); // Recargar la lista de ventas
-        } catch (error) {
-            console.error('Error al anular la venta:', error);
-            if (error.message !== 'Unauthorized' && error.message !== 'No token found') {
-                Swal.fire(
-                    'Error',
-                    error.message || 'No se pudo anular la venta.',
-                    'error'
-                );
-            }
+      try {
+        const response = await secureFetch(
+          `${BASE_API_URL}/api/ventas/anular/${ventaId}`,
+          {
+            method: "PUT",
+          },
+        );
+        Swal.fire(
+          "¡Anulada!",
+          response.message || "La venta ha sido anulada.",
+          "success",
+        );
+        buscarVentasPorCedula(); // Recargar la lista de ventas
+      } catch (error) {
+        console.error("Error al anular la venta:", error);
+        if (
+          error.message !== "Unauthorized" &&
+          error.message !== "No token found"
+        ) {
+          Swal.fire(
+            "Error",
+            error.message || "No se pudo anular la venta.",
+            "error",
+          );
         }
+      }
     }
   }
 
@@ -395,7 +425,7 @@ document.addEventListener("DOMContentLoaded", function () {
       Swal.fire(
         "Error",
         "No se pudieron cargar los datos de la venta para la devolución.",
-        "error"
+        "error",
       );
       return;
     }
@@ -408,7 +438,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     try {
       const detalles = await secureFetch(
-        `${BASE_API_URL}/api/ventas/${ventaId}/original-detalles`
+        `${BASE_API_URL}/api/ventas/${ventaId}/original-detalles`,
       );
 
       if (detalles.length === 0) {
@@ -418,10 +448,10 @@ document.addEventListener("DOMContentLoaded", function () {
           const row = document.createElement("tr");
           row.dataset.idProducto = item.id_producto;
           row.innerHTML = `
-              <td>${item.descripcion}</td>
-              <td>${item.cantidad_original}</td>
+              <td>${item.nombre}</td>
+              <td>${item.cantidad_vendida}</td>
               <td>
-                  <input type="number" class="form-control form-control-sm cantidad-a-devolver" value="0" min="0" max="${item.cantidad_original}">
+                  <input type="number" class="form-control form-control-sm cantidad-a-devolver" value="0" min="0" max="${item.cantidad_vendida}">
               </td>
           `;
           modalVentaItemsBody.appendChild(row);
@@ -429,8 +459,11 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     } catch (error) {
       console.error(error);
-       if (error.message !== 'Unauthorized' && error.message !== 'No token found') {
-            modalVentaItemsBody.innerHTML = `<tr><td colspan="3">No se pudieron cargar los artículos.</td></tr>`;
+      if (
+        error.message !== "Unauthorized" &&
+        error.message !== "No token found"
+      ) {
+        modalVentaItemsBody.innerHTML = `<tr><td colspan="3">No se pudieron cargar los artículos.</td></tr>`;
       }
     }
 
@@ -449,7 +482,7 @@ document.addEventListener("DOMContentLoaded", function () {
       Swal.fire(
         "¡Atención!",
         "Por favor, complete todos los campos: motivo, depósito y comentario.",
-        "warning"
+        "warning",
       );
       return;
     }
@@ -471,7 +504,7 @@ document.addEventListener("DOMContentLoaded", function () {
       Swal.fire(
         "¡Atención!",
         "Debe especificar la cantidad a devolver para al menos un producto.",
-        "warning"
+        "warning",
       );
       return;
     }
@@ -489,26 +522,28 @@ document.addEventListener("DOMContentLoaded", function () {
         {
           method: "POST",
           body: JSON.stringify(datosParaElServidor),
-        }
+        },
       );
 
       Swal.fire(
         "¡Listo!",
         resultado.message || "La devolución se procesó correctamente.",
-        "success"
+        "success",
       );
-      
+
       if (resultado.id_devolucion) {
-           try {
-                const response = await secureFetch(`${BASE_API_URL}/api/ventas/reporte-devolucion/${resultado.id_devolucion}`);
-                const blob = await response.blob();
-                const pdfUrl = URL.createObjectURL(blob);
-                window.open(pdfUrl, '_blank');
-                setTimeout(() => URL.createObjectURL(pdfUrl), 60000);
-           } catch(pdfError) {
-                console.error("Error generating return PDF", pdfError);
-                // The main operation succeeded, so we don't show a blocking error
-           }
+        try {
+          const response = await secureFetch(
+            `${BASE_API_URL}/api/ventas/reporte-devolucion/${resultado.id_devolucion}`,
+          );
+          const blob = await response.blob();
+          const pdfUrl = URL.createObjectURL(blob);
+          window.open(pdfUrl, "_blank");
+          setTimeout(() => URL.createObjectURL(pdfUrl), 60000);
+        } catch (pdfError) {
+          console.error("Error generating return PDF", pdfError);
+          // The main operation succeeded, so we don't show a blocking error
+        }
       }
 
       devolucionModal.hide();
@@ -516,12 +551,15 @@ document.addEventListener("DOMContentLoaded", function () {
       buscarVentasPorCedula();
     } catch (error) {
       console.error("Hubo un problema al procesar la devolución:", error);
-       if (error.message !== 'Unauthorized' && error.message !== 'No token found') {
-            Swal.fire(
-                "¡Error!",
-                error.message || "No se pudo completar la devolución.",
-                "error"
-            );
+      if (
+        error.message !== "Unauthorized" &&
+        error.message !== "No token found"
+      ) {
+        Swal.fire(
+          "¡Error!",
+          error.message || "No se pudo completar la devolución.",
+          "error",
+        );
       }
     }
   });

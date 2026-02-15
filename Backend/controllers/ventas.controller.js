@@ -6,8 +6,8 @@ const path = require("path");
 
 module.exports = {};
 
-// Placeholder for a function that doesn't exist but is required by the router
 const anularVenta = async (req, res, next) => {
+  // Nota del Aprendiz: // Estamos normalizando la nomenclatura de la base de datos. Corregimos las referencias a 'id_producto' por 'id' en la tabla de productos y sincronizamos el campo de relación del cierre diario para que la anulación y el cierre definitivo operen sin errores de sintaxis SQL.
   const { id } = req.params; // id de la venta a anular
 
   const connection = await pool.getConnection();
@@ -23,15 +23,15 @@ const anularVenta = async (req, res, next) => {
     if (ventaRows.length === 0) {
       throw new Error(`La venta con ID ${id} no existe.`);
     }
-    if (ventaRows[0].estado === "ANULADA") {
+    if (ventaRows[0].estado === "Anulada") {
       return res
         .status(400)
         .json({ message: "La venta ya ha sido anulada previamente." });
     }
 
-    // Paso A: Cambiar el estado de la venta a 'ANULADA'
+    // Paso A: Cambiar el estado de la venta a 'Anulada'
     await connection.query(
-      "UPDATE ventas SET estado = 'ANULADA' WHERE id = ?",
+      "UPDATE ventas SET estado = 'Anulada' WHERE id = ?",
       [id],
     );
 
@@ -61,10 +61,10 @@ const anularVenta = async (req, res, next) => {
       );
       const totalStock = totalStockResult[0].total_cantidad || 0;
 
-      await connection.query(
-        "UPDATE productos SET stock = ? WHERE id_producto = ?",
-        [totalStock, detalle.id_producto],
-      );
+      await connection.query("UPDATE productos SET stock = ? WHERE id = ?", [
+        totalStock,
+        detalle.id_producto,
+      ]);
     }
     await connection.commit();
     res
@@ -80,6 +80,8 @@ const anularVenta = async (req, res, next) => {
 };
 
 const buscarVentasPorCedula = async (req, res, next) => {
+  // Implementamos el endpoint dedicado de búsqueda por cliente. Usamos un JOIN explícito para vincular el historial de ventas con la identidad del comprador, resolviendo el error 404 y permitiendo al usuario auditar transacciones pasadas rápidamente.
+  console.log("Buscando ventas para cédula:", req.params.cedula);
   try {
     const { cedula } = req.params;
     const page = parseInt(req.query.page, 10) || 1;
@@ -97,7 +99,6 @@ const buscarVentasPorCedula = async (req, res, next) => {
       [searchTerm],
     );
     const totalVentas = totalRows[0].total;
-    const totalPages = Math.ceil(totalVentas / limit);
 
     // Consulta para obtener las ventas paginadas
     const [rows] = await pool.query(
@@ -111,9 +112,8 @@ const buscarVentasPorCedula = async (req, res, next) => {
     );
 
     res.json({
-      ventas: rows,
-      totalPages: totalPages,
-      currentPage: page,
+      total: totalVentas,
+      data: rows,
     });
   } catch (error) {
     next(error);
@@ -145,6 +145,27 @@ const getSaleDetails = async (req, res, next) => {
     res.status(200).json(saleDetails);
   } catch (error) {
     console.error("Error al obtener detalles de la venta:", error);
+    next(error);
+  }
+};
+
+const obtenerDetallesVenta = async (req, res, next) => {
+  // Nota del Aprendiz: // Estamos habilitando la lectura de los renglones de la factura. Sin 'obtenerDetallesVenta', el modal de devolución está 'ciego' y no puede mostrar qué artículos están disponibles para retornar al inventario. Con esto, restauramos la trazabilidad completa de la venta.
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.query(
+      `SELECT 
+         dv.id_producto,
+         p.nombre,
+         dv.cantidad AS cantidad_vendida,
+         dv.precio_unitario
+       FROM detalle_ventas dv
+       JOIN productos p ON dv.id_producto = p.id
+       WHERE dv.id_venta = ?`,
+      [id],
+    );
+    res.json(rows);
+  } catch (error) {
     next(error);
   }
 };
@@ -229,10 +250,16 @@ const procesarDevolucion = async (req, res, next) => {
       );
 
       if (id_deposito_num === 1) {
-        // 1 = Venta
+        // 1 = Venta (Principal). Solo sumamos al stock general disponible para venta si entra al depósito 1.
         await connection.query(
           "UPDATE productos SET stock = stock + ? WHERE id = ?",
           [cantidad, id_producto_num],
+        );
+      } else {
+        // Si el producto va a "Dañado" (id=2) u otro depósito no comercial,
+        // NO actualizamos la tabla 'productos' (stock general), solo 'stock_depositos'.
+        console.log(
+          `Devolución: Producto ${id_producto_num} enviado a depósito ${id_deposito_num} (No disponible para venta).`,
         );
       }
     }
@@ -474,8 +501,7 @@ const procesarVenta = async (req, res, next) => {
   const {
     id_cliente,
     tasa_bcv,
-    metodo_pago,
-    referencia,
+    pagos, // Recibimos array de pagos
     detalles, // Se espera 'detalles', no 'productos'.
     subtotal,
     impuesto, // Frontend puede enviar 'iva' o 'impuesto', manejamos ambos.
@@ -485,13 +511,15 @@ const procesarVenta = async (req, res, next) => {
   } = req.body;
 
   const impuestoFinal = impuesto !== undefined ? impuesto : iva;
-  const id_usuario = req.user?.id_usuario || 1;
+  const id_usuario = req.user?.id || 1; // Corregido: el token JWT usa 'id', no 'id_usuario'
 
   // 3. Validación refinada y explícita.
   if (
     id_cliente === undefined ||
     id_cliente === null ||
-    !metodo_pago ||
+    !pagos ||
+    !Array.isArray(pagos) ||
+    pagos.length === 0 ||
     tasa_bcv === undefined ||
     !detalles ||
     !Array.isArray(detalles) ||
@@ -502,7 +530,7 @@ const procesarVenta = async (req, res, next) => {
   ) {
     console.error("Fallo de validación en procesarVenta. Datos evaluados:", {
       id_cliente,
-      metodo_pago,
+      pagos_count: pagos ? pagos.length : 0,
       tasa_bcv,
       has_detalles: !!(detalles && detalles.length > 0),
       subtotal,
@@ -534,8 +562,8 @@ const procesarVenta = async (req, res, next) => {
     // Inserción en la tabla 'ventas'
     const [ventaResult] = await connection.query(
       `INSERT INTO ventas 
-        (id_cliente, id_usuario, subtotal, impuesto, total, tasa_bcv, fecha_venta, numero_control, referencia, monto_flete, metodo_pago, estado) 
-        VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, 'COMPLETADA')`,
+        (id_cliente, id_usuario, subtotal, impuesto, total, tasa_bcv, fecha_venta, numero_control, monto_flete, estado, estado_cierre) 
+        VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?, 'COMPLETADA', 'PENDIENTE')`,
       [
         id_cliente,
         id_usuario,
@@ -544,12 +572,19 @@ const procesarVenta = async (req, res, next) => {
         total,
         tasa_bcv,
         numero_control_val,
-        referencia || "N/A",
         monto_flete || 0.0,
-        metodo_pago,
       ],
     );
     const id_venta = ventaResult.insertId;
+
+    // Procesamiento de Pagos (Tabla 1:N)
+    for (const pago of pagos) {
+      // Se asume que el objeto pago tiene { metodo, monto, referencia }
+      await connection.query(
+        "INSERT INTO venta_pagos (id_venta, metodo_pago, monto_pago, referencia) VALUES (?, ?, ?, ?)",
+        [id_venta, pago.metodo, pago.monto, pago.referencia || null],
+      );
+    }
 
     // Procesamiento de detalles de la venta.
     for (const detalle of detalles) {
@@ -652,14 +687,14 @@ const obtenerUltimaTasa = async (req, res, next) => {
       "No se pudo determinar la tasa de cambio. Por favor, configúrela en la base de datos.",
   });
 };
-const generarReporte = async (req, res, next) => {
+const generarComprobante = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     // 1. Obtener datos de la venta, cliente y pago.
     // Se asume que v.* trae todos los campos necesarios.
     const [ventaData] = await pool.query(
-      `SELECT v.id, v.subtotal, v.impuesto, v.total, v.tasa_bcv, v.metodo_pago, v.referencia, v.numero_control, v.fecha_venta, v.monto_flete, c.razon_social, c.rif_cedula, c.direccion_fiscal, c.telefono 
+      `SELECT v.id, v.subtotal, v.impuesto, v.total, v.tasa_bcv, v.numero_control, v.fecha_venta, v.monto_flete, c.razon_social, c.rif_cedula, c.direccion_fiscal, c.telefono 
              FROM ventas v 
              JOIN clientes c ON v.id_cliente = c.id 
              WHERE v.id = ?`,
@@ -670,6 +705,12 @@ const generarReporte = async (req, res, next) => {
       return res.status(404).json({ message: "Venta no encontrada" });
     }
     const venta = ventaData[0];
+
+    // 1.1 Obtener los pagos asociados
+    const [pagosData] = await pool.query(
+      "SELECT metodo_pago, monto_pago, referencia FROM venta_pagos WHERE id_venta = ?",
+      [id],
+    );
 
     // 2. Obtener detalles de la venta, incluyendo la marca del producto.
     const [detallesVenta] = await pool.query(
@@ -785,17 +826,18 @@ const generarReporte = async (req, res, next) => {
     doc.setFont("helvetica", "bold");
     doc.text("MÉTODO DE PAGO", pageWidth / 2, 54);
     doc.setFont("helvetica", "normal");
-    const metodoPago = venta.metodo_pago
-      ? venta.metodo_pago.charAt(0).toUpperCase() + venta.metodo_pago.slice(1)
-      : "No especificado";
-    doc.text(metodoPago, pageWidth / 2, 60);
 
-    // Lógica de Referencia: Si el método de pago es diferente a 'Efectivo', muestra la referencia.
-    if (venta.metodo_pago && venta.metodo_pago.toLowerCase() !== "efectivo") {
-      doc.setFont("helvetica", "bold");
-      doc.text("Referencia:", pageWidth / 2, 72); // Adjusted Y position due to new address line
-      doc.setFont("helvetica", "normal");
-      doc.text(String(venta.referencia || "N/A"), pageWidth / 2 + 25, 72);
+    // Listar pagos combinados
+    let yPago = 60;
+    pagosData.forEach((p) => {
+      const texto = `${p.metodo_pago}: $${safeParseFloat(p.monto_pago).toFixed(2)} ${p.referencia ? "(Ref: " + p.referencia + ")" : ""}`;
+      doc.text(texto, pageWidth / 2, yPago);
+      yPago += 6;
+    });
+
+    // Ajustar si hay muchos pagos para no solapar (simple fallback)
+    if (yPago > 78) {
+      // En un caso real, ajustaríamos startY de la tabla dinámicamente
     }
 
     // --- TABLA DE ARTÍCULOS ---
@@ -937,15 +979,16 @@ const obtenerReporteX = async (req, res, next) => {
       FROM ventas v
       JOIN detalle_ventas dv ON v.id = dv.id_venta
       JOIN productos p ON dv.id_producto = p.id
-      WHERE v.estado_cierre = 'PENDIENTE'
+      WHERE v.estado_cierre = 'PENDIENTE' AND DATE(v.fecha_venta) = CURDATE()
     `);
 
     // Consulta para el desglose por método de pago
     const [desglosePagos] = await pool.query(`
-      SELECT metodo_pago, IFNULL(SUM(total), 0) as total
-      FROM ventas
-      WHERE estado_cierre = 'PENDIENTE'
-      GROUP BY metodo_pago
+      SELECT vp.metodo_pago, IFNULL(SUM(vp.monto_pago), 0) as total
+      FROM venta_pagos vp
+      JOIN ventas v ON vp.id_venta = v.id
+      WHERE v.estado_cierre = 'PENDIENTE' AND DATE(v.fecha_venta) = CURDATE()
+      GROUP BY vp.metodo_pago
     `);
 
     res.json({
@@ -995,16 +1038,17 @@ const generarCierreZ = async (req, res, next) => {
 
     // 2. Obtener el desglose de pagos para el reporte
     const [desglosePagos] = await connection.execute(`
-      SELECT metodo_pago, IFNULL(SUM(total), 0) as total
-      FROM ventas
-      WHERE estado_cierre = 'PENDIENTE'
-      GROUP BY metodo_pago
+      SELECT vp.metodo_pago, IFNULL(SUM(vp.monto_pago), 0) as total
+      FROM venta_pagos vp
+      JOIN ventas v ON vp.id_venta = v.id
+      WHERE v.estado_cierre = 'PENDIENTE'
+      GROUP BY vp.metodo_pago
     `);
 
     // 3. Guardar en el historial de cierres usando el ID del usuario autenticado
     const [cierreResult] = await connection.execute(
-      `INSERT INTO cierres_diarios (ingresos_totales, costo_mercancia, utilidad_neta, usuario_id) 
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO cierres_diarios (ingresos_totales, costo_mercancia, utilidad_neta, usuario_id, fecha_cierre) 
+       VALUES (?, ?, ?, ?, NOW())`,
       [ingresos, costos, utilidad, req.user.id], // req.user.id viene del middleware de auth
     );
     const id_cierre = cierreResult.insertId;
@@ -1029,6 +1073,7 @@ const generarCierreZ = async (req, res, next) => {
         costo_total_mercancia: costos,
         utilidad_neta: utilidad,
         desglose_pagos: desglosePagos,
+        fecha_cierre: new Date(),
       },
     });
   } catch (error) {
@@ -1042,7 +1087,7 @@ const generarCierreZ = async (req, res, next) => {
 module.exports = {
   procesarVenta,
   obtenerUltimaTasa,
-  generarReporte,
+  generarComprobante,
   obtenerVentas,
   buscarVentasPorCedula,
   obtenerMotivosDevolucion,
@@ -1053,4 +1098,6 @@ module.exports = {
   getSaleDetails,
   obtenerReporteX, // Añadido para el control de caja
   generarCierreZ, // Añadido para el control de caja
+  obtenerDetallesVenta,
+  generarReporteDevolucion: generarPDFDevolucion, // Alias para cumplir con la ruta solicitada reutilizando la lógica existente
 };

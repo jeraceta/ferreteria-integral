@@ -1,4 +1,3 @@
-// Integramos la visualización de la Marca en el proceso de venta y facturación para garantizar transparencia con el cliente, ajustando los estilos CSS para mantener la interfaz compacta y funcional.
 document.addEventListener("DOMContentLoaded", () => {
   console.log("Sistema de Ventas Iniciado");
   // --- CAPTURA DE ELEMENTOS DEL DOM ---
@@ -12,25 +11,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const clienteTelefonoInput = document.getElementById("clienteTelefono");
   const clienteEmailInput = document.getElementById("clienteEmail");
   const tipoContribuyenteSelect = document.getElementById("tipoContribuyente");
-  const procesarVentaBtn = document.getElementById("procesarVentaBtn");
   const tasaCambioInput = document.getElementById("tasaCambioInput");
-  const cobrarIvaSwitch = document.getElementById('cobrarIvaSwitch');
+  const cobrarIvaSwitch = document.getElementById("cobrarIvaSwitch");
   const ivaRow = document.getElementById("ivaRow");
   const inputBusqueda = document.getElementById("buscarProductoInput");
   const listaSugerencias = document.getElementById("listaSugerenciasProductos");
 
-  // --- Nuevos elementos para Flete y Referencia ---
-  const metodoPagoSelect = document.getElementById("metodoPagoSelect");
-  const campoReferencia = document.getElementById("campoReferencia");
-  const referenciaInput = document.getElementById("referenciaInput");
-  const fleteInput = document.getElementById("fleteInput");
-  const fleteVenta = document.getElementById("fleteVenta");
-  const fleteVentaBS = document.getElementById("fleteVentaBS");
-
-
   // --- VARIABLES DE ESTADO ---
   let clienteActual = null;
   let productosEnVenta = []; // Array para almacenar los objetos completos de los productos en la venta
+
+  // --- NUEVA LÓGICA DE PAGOS COMBINADOS ---
+  let listaPagos = [];
+  let totalFactura = 0;
+  let modalTotalizar; // Instancia del modal de Bootstrap
+
   const API_CLIENTES_URL = "http://localhost:3000/api/clientes";
   const API_VENTAS_URL = "http://localhost:3000/api/ventas";
   const API_PRODUCTOS_URL = "http://localhost:3000/api/productos";
@@ -41,19 +36,23 @@ document.addEventListener("DOMContentLoaded", () => {
    * @description Muestra los detalles completos de un producto en un modal.
    * @param {number} index El índice del producto en el array `productosEnVenta`.
    */
-  window.verDetalleProducto = function(index) {
+  window.verDetalleProducto = function (index) {
     const producto = productosEnVenta[index];
     if (!producto) {
-        console.error("No se encontró el producto en el índice:", index);
-        Swal.fire("Error", "No se pudo encontrar la información del producto.", "error");
-        return;
+      console.error("No se encontró el producto en el índice:", index);
+      Swal.fire(
+        "Error",
+        "No se pudo encontrar la información del producto.",
+        "error",
+      );
+      return;
     }
 
     const htmlContent = `
         <div style="text-align: left; padding: 1rem;">
             <p style="font-size: 1.2rem; margin-bottom: 0.5rem;">
                 <strong >Producto:</strong> ${producto.nombre} 
-                <span class="badge bg-secondary" style="font-size: 0.9rem; vertical-align: middle;">${producto.marca || 'Genérico'}</span>
+                <span class="badge bg-secondary" style="font-size: 0.9rem; vertical-align: middle;">${producto.marca || "Genérico"}</span>
             </p>
             <p style="font-size: 1rem; color: #555;"><strong>Código:</strong> ${producto.codigo}</p>
             <hr>
@@ -65,37 +64,22 @@ document.addEventListener("DOMContentLoaded", () => {
             <hr>
             <p style="font-size: 1rem;"><strong>📝 Descripción:</strong></p>
             <p style="font-style: italic; color: #6c757d; background-color: #f8f9fa; padding: 0.5rem; border-radius: 5px;">
-                ${producto.descripcion || 'Sin descripción detallada.'}
+                ${producto.descripcion || "Sin descripción detallada."}
             </p>
         </div>
     `;
 
     Swal.fire({
-        title: 'Ficha Técnica del Producto',
-        html: htmlContent,
-        confirmButtonText: 'Cerrar',
-        width: '50%',
-        customClass: {
-            title: 'swal2-title-custom',
-            htmlContainer: 'swal2-html-container-custom'
-        }
+      title: "Ficha Técnica del Producto",
+      html: htmlContent,
+      confirmButtonText: "Cerrar",
+      width: "50%",
+      customClass: {
+        title: "swal2-title-custom",
+        htmlContainer: "swal2-html-container-custom",
+      },
     });
-  }
-
-  /**
-   * @description Esta función se encarga de mostrar u ocultar el campo de 'Referencia'.
-   * Lo muestra si el método de pago es algo distinto a 'Efectivo', y lo oculta si lo es.
-   * También limpia el campo si se vuelve a seleccionar 'Efectivo'.
-   */
-  function gestionarVisibilidadReferencia() {
-    if (metodoPagoSelect.value === 'Efectivo') {
-      campoReferencia.style.display = 'none';
-      referenciaInput.value = ''; // Limpiar el valor al ocultar
-    } else {
-      campoReferencia.style.display = 'block';
-    }
-  }
-
+  };
 
   /**
    * @description Calcula y actualiza todos los montos de la venta en la pantalla.
@@ -109,7 +93,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const filasProductos = document.querySelectorAll("#productosVentaBody tr");
     const tasaCambio = parseFloat(tasaCambioInput.value) || 1;
     const cobrarIva = cobrarIvaSwitch.checked;
-    const fleteUSD = parseFloat(fleteInput.value) || 0;
 
     if (ivaRow) {
       ivaRow.style.display = cobrarIva ? "" : "none";
@@ -121,176 +104,35 @@ document.addEventListener("DOMContentLoaded", () => {
       const cantidad = parseFloat(cantidadInput.value) || 0;
       const subtotalFila = precio * cantidad;
 
-      fila.querySelector(".subtotal-producto").textContent = subtotalFila.toFixed(2);
+      fila.querySelector(".subtotal-producto").textContent =
+        subtotalFila.toFixed(2);
       subtotalUSD += subtotalFila;
     });
 
-    // 1. ¿Por qué sumamos el flete? Por ley, el flete es parte del servicio total
-    // y debe incluirse en la base sobre la cual se calcula el impuesto.
-    const baseImponibleUSD = subtotalUSD + fleteUSD;
-
-    // 2. ¿Cómo se calcula el nuevo IVA? Se aplica la tasa del 16% a la suma
-    // del subtotal de productos más el costo del flete.
-    const ivaUSD = cobrarIva ? baseImponibleUSD * IVA_RATE : 0;
-
-    const totalUSD = baseImponibleUSD + ivaUSD; // El total es la base + su impuesto
+    const ivaUSD = cobrarIva ? subtotalUSD * IVA_RATE : 0;
+    const totalUSD = subtotalUSD + ivaUSD;
     const totalBS = totalUSD * tasaCambio;
 
     // Inyectar los resultados en el DOM
-    document.getElementById("subtotalVenta").textContent = subtotalUSD.toFixed(2);
+    document.getElementById("subtotalVenta").textContent =
+      subtotalUSD.toFixed(2);
     document.getElementById("ivaVenta").textContent = ivaUSD.toFixed(2);
-
-    if (fleteVenta && fleteVentaBS) {
-      fleteVenta.textContent = fleteUSD.toFixed(2);
-      fleteVentaBS.textContent = (fleteUSD * tasaCambio).toFixed(2);
-    }
 
     document.getElementById("totalVenta").textContent = totalUSD.toFixed(2);
 
     // Montos en Bolívares
-    document.getElementById("subtotalVentaBS").textContent = (subtotalUSD * tasaCambio).toFixed(2);
-    document.getElementById("ivaVentaBS").textContent = (ivaUSD * tasaCambio).toFixed(2);
-    document.getElementById("totalVentaBS").textContent = totalBS.toLocaleString("es-VE", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    document.getElementById("subtotalVentaBS").textContent = (
+      subtotalUSD * tasaCambio
+    ).toFixed(2);
+    document.getElementById("ivaVentaBS").textContent = (
+      ivaUSD * tasaCambio
+    ).toFixed(2);
+    document.getElementById("totalVentaBS").textContent =
+      totalBS.toLocaleString("es-VE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
   }
-
-
-  /**
-   * @description Procesa la venta final. Recolecta todos los datos del cliente, 
-   * productos, y totales, y los envía al servidor para ser guardados en la base de datos.
-   */
-  async function procesarVenta() {
-    console.log("Procesando venta...");
-    if (!clienteActual || !clienteActual.id) {
-      Swal.fire(
-        "Cliente no definido",
-        "Por favor, busca o registra un cliente.",
-        "warning",
-      );
-      return;
-    }
-
-    const productos = [];
-    const productosVentaBody = document.getElementById("productosVentaBody");
-    const filasProductos = productosVentaBody.querySelectorAll("tr");
-
-    if (filasProductos.length === 0) {
-      Swal.fire(
-        "No hay productos",
-        "Por favor, añade productos a la venta.",
-        "warning",
-      );
-      return;
-    }
-
-    for (const fila of filasProductos) {
-      const id_producto = fila.getAttribute("data-producto-id");
-      const cantidadInput = fila.querySelector(".cantidad-producto");
-      const cantidad = parseFloat(cantidadInput.value) || 0;
-      const precio_unitario =
-        parseFloat(cantidadInput.getAttribute("data-precio")) || 0;
-
-      if (cantidad > 0) {
-        productos.push({
-          id_producto: id_producto,
-          cantidad: cantidad,
-          precio_unitario: precio_unitario,
-        });
-      }
-    }
-
-    if (productos.length === 0) {
-      Swal.fire(
-        "Venta vacía",
-        "No hay productos con cantidad válida.",
-        "warning",
-      );
-      return;
-    }
-
-    const tasa_bcv = parseFloat(tasaCambioInput.value) || 1;
-    const subtotal_dolares =
-      parseFloat(document.getElementById("subtotalVenta").textContent) || 0;
-    const iva_dolares =
-      parseFloat(document.getElementById("ivaVenta").textContent) || 0;
-    const total_dolares =
-      parseFloat(document.getElementById("totalVenta").textContent) || 0;
-    const total_bolivares =
-      parseFloat(
-        document
-          .getElementById("totalVentaBS")
-          .textContent.replace(/\./g, "")
-          .replace(/,/g, "."),
-      ) || 0;
-
-    // --- RECOLECCIÓN DE DATOS DE LA VENTA (PAYLOAD PLANO) ---
-    const payload = {
-      id_cliente: clienteActual.id,
-      tasa_bcv: tasa_bcv,
-      subtotal: subtotal_dolares,
-      iva: iva_dolares,
-      total: total_dolares,
-      detalles: productos, // 'detalles' es el nombre esperado en el backend
-      monto_flete: parseFloat(fleteInput.value) || 0,
-      metodo_pago: metodoPagoSelect.value || "Efectivo",
-      referencia: referenciaInput.value.trim() || null
-    };
-
-    try {
-      Swal.fire({
-        title: "Procesando Venta...",
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
-
-      const response = await fetch(`${API_VENTAS_URL}/registrar`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-      if (!response.ok)
-        throw new Error(result.message || "Error al procesar la venta.");
-
-      Swal.fire({
-        title: "¡Venta registrada!",
-        text: "¿Deseas imprimir la Nota de Entrega?",
-        icon: "success",
-        showCancelButton: true,
-        confirmButtonText: "Sí, imprimir",
-        cancelButtonText: "No, gracias",
-      }).then((action) => {
-        if (action.isConfirmed) {
-          const ventaId = result.id || result.id_venta || result.insertId;
-          window.open(
-            `http://localhost:3000/api/ventas/reporte/${ventaId}`,
-            "_blank",
-          );
-        }
-        limpiarCamposCliente();
-        productosVentaBody.innerHTML = "";
-        productosEnVenta = []; // Limpiar el array de productos en memoria
-        fleteInput.value = "0"; // Resetear flete
-        metodoPagoSelect.value = "Efectivo"; // Resetear método de pago
-        gestionarVisibilidadReferencia(); // Ocultar referencia
-        actualizarTotales();
-      });
-    } catch (error) {
-      console.error("Error al procesar venta:", error);
-      Swal.fire(
-        "Error",
-        `No se pudo procesar la venta. Detalle: ${error.message}`,
-        "error",
-      );
-    }
-  }
-
 
   // --- RESTO DE FUNCIONES (SIN CAMBIOS IMPORTANTES) ---
   function toggleClientFieldsReadOnly(isReadOnly) {
@@ -321,7 +163,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const tipoDoc = tipoDocumentoCliente.value;
     const numeroDoc = clienteRifCedulaInput.value.trim();
     if (!numeroDoc) {
-      Swal.fire("Faltan datos", "Por favor, ingresa el RIF o Cédula.", "warning");
+      Swal.fire(
+        "Faltan datos",
+        "Por favor, ingresa el RIF o Cédula.",
+        "warning",
+      );
       return;
     }
     try {
@@ -329,7 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
       btnBuscarCliente.disabled = true;
       const response = await fetch(url, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       });
       btnBuscarCliente.disabled = false;
@@ -360,7 +206,8 @@ document.addEventListener("DOMContentLoaded", () => {
       clienteDireccionInput.value = clienteEncontrado.direccion_fiscal || "";
       clienteTelefonoInput.value = clienteEncontrado.telefono || "";
       clienteEmailInput.value = clienteEncontrado.email || "";
-      tipoContribuyenteSelect.value = clienteEncontrado.tipo_contribuyente || "Ordinario";
+      tipoContribuyenteSelect.value =
+        clienteEncontrado.tipo_contribuyente || "Ordinario";
       if (clienteEncontrado.tipo_documento) {
         tipoDocumentoCliente.value = clienteEncontrado.tipo_documento;
       }
@@ -395,7 +242,11 @@ document.addEventListener("DOMContentLoaded", () => {
       tipo_contribuyente: tipoContribuyenteSelect.value,
     };
     if (!nuevoClienteData.rif_cedula || !nuevoClienteData.razon_social) {
-      Swal.fire("Datos incompletos", "Cédula/RIF y Razón Social son obligatorios.", "warning");
+      Swal.fire(
+        "Datos incompletos",
+        "Cédula/RIF y Razón Social son obligatorios.",
+        "warning",
+      );
       return;
     }
     try {
@@ -421,7 +272,11 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error("Respuesta inválida del servidor.");
       }
     } catch (error) {
-      Swal.fire("Error al registrar", `No se pudo guardar. Detalle: ${error.message}`, "error");
+      Swal.fire(
+        "Error al registrar",
+        `No se pudo guardar. Detalle: ${error.message}`,
+        "error",
+      );
     }
   }
 
@@ -436,7 +291,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const tablaBody = document.getElementById("productosVentaBody");
-    const filaExistente = tablaBody.querySelector(`tr[data-producto-id="${producto.id}"]`);
+    const filaExistente = tablaBody.querySelector(
+      `tr[data-producto-id="${producto.id}"]`,
+    );
     if (filaExistente) {
       const cantidadInput = filaExistente.querySelector(".cantidad-producto");
       const nuevaCantidad = (parseFloat(cantidadInput.value) || 0) + 1;
@@ -444,7 +301,11 @@ document.addEventListener("DOMContentLoaded", () => {
         cantidadInput.value = nuevaCantidad;
         actualizarTotales();
       } else {
-        Swal.fire("Stock Insuficiente", `Solo hay ${producto.stock} unidades.`, "warning");
+        Swal.fire(
+          "Stock Insuficiente",
+          `Solo hay ${producto.stock} unidades.`,
+          "warning",
+        );
       }
       return;
     }
@@ -457,7 +318,7 @@ document.addEventListener("DOMContentLoaded", () => {
     fila.innerHTML = `
         <td>${producto.codigo}</td>
         <td>${producto.nombre}</td>
-        <td>${producto.marca || '-'}</td>
+        <td>${producto.marca || "-"}</td>
         <td class="precio-producto-celda" style="cursor: pointer;" title="Doble clic para editar"><span>${parseFloat(producto.precio_venta).toFixed(2)}</span></td>
         <td><input type="number" class="form-control form-control-sm cantidad-producto" value="1" min="1" max="${producto.stock}" data-precio="${producto.precio_venta}" data-stock="${producto.stock}" style="width: 70px;"></td>
         <td class="subtotal-producto">${parseFloat(producto.precio_venta).toFixed(2)}</td>
@@ -475,84 +336,94 @@ document.addEventListener("DOMContentLoaded", () => {
     const cantidadInput = fila.querySelector(".cantidad-producto");
     const precioCelda = fila.querySelector(".precio-producto-celda");
 
-    precioCelda.addEventListener('dblclick', () => {
-        const span = precioCelda.querySelector('span');
-        const originalPrice = parseFloat(span.textContent);
-        const input = document.createElement('input');
-        input.type = 'number';
-        input.className = 'form-control form-control-sm';
-        input.value = originalPrice.toFixed(2);
-        input.style.width = '100px';
+    precioCelda.addEventListener("dblclick", () => {
+      const span = precioCelda.querySelector("span");
+      const originalPrice = parseFloat(span.textContent);
+      const input = document.createElement("input");
+      input.type = "number";
+      input.className = "form-control form-control-sm";
+      input.value = originalPrice.toFixed(2);
+      input.style.width = "100px";
 
-        span.style.display = 'none';
-        precioCelda.appendChild(input);
-        input.focus();
-        input.select();
+      span.style.display = "none";
+      precioCelda.appendChild(input);
+      input.focus();
+      input.select();
 
-        const finalizarEdicion = async (guardar) => {
-            const nuevoPrecio = parseFloat(input.value);
+      const finalizarEdicion = async (guardar) => {
+        const nuevoPrecio = parseFloat(input.value);
 
-            if (guardar && nuevoPrecio !== originalPrice && !isNaN(nuevoPrecio) && nuevoPrecio > 0) {
-                const confirmacion = await Swal.fire({
-                    title: '¿Cambiar el precio?',
-                    text: `El precio de "${producto.nombre}" cambiará de ${originalPrice.toFixed(2)} a ${nuevoPrecio.toFixed(2)}. ¿Confirmas?`,
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Sí, cambiar',
-                    cancelButtonText: 'No, cancelar'
-                });
+        if (
+          guardar &&
+          nuevoPrecio !== originalPrice &&
+          !isNaN(nuevoPrecio) &&
+          nuevoPrecio > 0
+        ) {
+          const confirmacion = await Swal.fire({
+            title: "¿Cambiar el precio?",
+            text: `El precio de "${producto.nombre}" cambiará de ${originalPrice.toFixed(2)} a ${nuevoPrecio.toFixed(2)}. ¿Confirmas?`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Sí, cambiar",
+            cancelButtonText: "No, cancelar",
+          });
 
-                if (confirmacion.isConfirmed) {
-                    span.textContent = nuevoPrecio.toFixed(2);
-                    cantidadInput.dataset.precio = nuevoPrecio.toFixed(2);
-                    // Actualizar el precio en el array en memoria
-                    productosEnVenta[index].precio_venta = nuevoPrecio.toFixed(2);
-                    actualizarTotales();
-                }
-            }
-            
-            input.remove();
-            span.style.display = 'inline';
-        };
+          if (confirmacion.isConfirmed) {
+            span.textContent = nuevoPrecio.toFixed(2);
+            cantidadInput.dataset.precio = nuevoPrecio.toFixed(2);
+            // Actualizar el precio en el array en memoria
+            productosEnVenta[index].precio_venta = nuevoPrecio.toFixed(2);
+            actualizarTotales();
+          }
+        }
 
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                input.blur(); // Dispara el evento blur para guardar
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                input.value = originalPrice.toFixed(2); // Restaura valor original
-                input.blur(); // Dispara el evento blur sin guardar
-            }
-        });
+        input.remove();
+        span.style.display = "inline";
+      };
 
-        input.addEventListener('blur', () => finalizarEdicion(true));
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          input.blur(); // Dispara el evento blur para guardar
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          input.value = originalPrice.toFixed(2); // Restaura valor original
+          input.blur(); // Dispara el evento blur sin guardar
+        }
+      });
+
+      input.addEventListener("blur", () => finalizarEdicion(true));
     });
-
 
     cantidadInput.addEventListener("input", () => {
       const cantidadActual = parseFloat(cantidadInput.value);
       const maxStock = parseFloat(cantidadInput.getAttribute("data-stock"));
       if (cantidadActual > maxStock) {
-        Swal.fire("Stock Insuficiente", `Solo hay ${maxStock} unidades.`, "warning");
+        Swal.fire(
+          "Stock Insuficiente",
+          `Solo hay ${maxStock} unidades.`,
+          "warning",
+        );
         cantidadInput.value = maxStock;
       }
       actualizarTotales();
     });
-    
-    fila.querySelector(".eliminar-producto").addEventListener("click", (e) => {
-        const idParaEliminar = e.currentTarget.getAttribute('data-id');
-        const indiceParaEliminar = productosEnVenta.findIndex(p => p.id == idParaEliminar);
 
-        if (indiceParaEliminar > -1) {
-            productosEnVenta.splice(indiceParaEliminar, 1);
-            // Volver a renderizar la tabla para re-calcular los índices
-            renderizarTablaVenta(); 
-        } else {
-             // Si no se encuentra, simplemente removemos la fila (comportamiento fallback)
-            e.currentTarget.closest('tr').remove();
-        }
-        actualizarTotales();
+    fila.querySelector(".eliminar-producto").addEventListener("click", (e) => {
+      const idParaEliminar = e.currentTarget.getAttribute("data-id");
+      const indiceParaEliminar = productosEnVenta.findIndex(
+        (p) => p.id == idParaEliminar,
+      );
+
+      if (indiceParaEliminar > -1) {
+        productosEnVenta.splice(indiceParaEliminar, 1);
+        // Volver a renderizar la tabla para re-calcular los índices
+        renderizarTablaVenta();
+      } else {
+        // Si no se encuentra, simplemente removemos la fila (comportamiento fallback)
+        e.currentTarget.closest("tr").remove();
+      }
+      actualizarTotales();
     });
 
     actualizarTotales();
@@ -564,10 +435,10 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   function renderizarTablaVenta() {
     const tablaBody = document.getElementById("productosVentaBody");
-    tablaBody.innerHTML = ''; // Limpiar la tabla
+    tablaBody.innerHTML = ""; // Limpiar la tabla
     const productosCopia = [...productosEnVenta]; // Crear copia para no mutar el array original
     productosEnVenta = []; // Limpiar el array principal
-    productosCopia.forEach(p => agregarProductoATabla(p)); // Volver a agregar cada producto
+    productosCopia.forEach((p) => agregarProductoATabla(p)); // Volver a agregar cada producto
   }
 
   function seleccionarProducto(producto) {
@@ -590,9 +461,9 @@ document.addEventListener("DOMContentLoaded", () => {
       item.classList.add("sugerencia-item");
 
       // Formatear precio con separadores de miles y dos decimales
-      const precioFormateado = new Intl.NumberFormat('es-VE', {
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
+      const precioFormateado = new Intl.NumberFormat("es-VE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       }).format(producto.precio_venta);
 
       // Misión: Maquetación con alineación de extremos y separadores.
@@ -600,15 +471,15 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="sugerencia-bloque-izquierdo">
             <span class="sugerencia-codigo">${producto.codigo}</span>
             <span class="sugerencia-nombre">${producto.nombre}</span>
-            ${producto.marca ? '<span class="sugerencia-separador">•</span>' : ''}
-            <span class="sugerencia-marca">${producto.marca || ''}</span>
+            ${producto.marca ? '<span class="sugerencia-separador">•</span>' : ""}
+            <span class="sugerencia-marca">${producto.marca || ""}</span>
         </div>
         <div class="sugerencia-bloque-derecho">
             <span class="sugerencia-precio">$ ${precioFormateado}</span>
             <span class="sugerencia-stock">Stock: ${producto.stock}</span>
         </div>
       `;
-      
+
       if (producto.stock <= 0) {
         item.classList.add("disabled-suggestion");
         item.title = "Sin existencia en inventario";
@@ -621,7 +492,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- ASIGNACIÓN DE EVENTOS ---
-  if (btnBuscarCliente) btnBuscarCliente.addEventListener("click", buscarCliente);
+  if (btnBuscarCliente)
+    btnBuscarCliente.addEventListener("click", buscarCliente);
   if (clienteRifCedulaInput) {
     clienteRifCedulaInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
@@ -630,10 +502,10 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
-  if (btnGuardarCliente) btnGuardarCliente.addEventListener("click", registrarCliente);
-  if (btnLimpiarCliente) btnLimpiarCliente.addEventListener("click", limpiarCamposCliente);
-  if (procesarVentaBtn) procesarVentaBtn.addEventListener("click", procesarVenta);
-
+  if (btnGuardarCliente)
+    btnGuardarCliente.addEventListener("click", registrarCliente);
+  if (btnLimpiarCliente)
+    btnLimpiarCliente.addEventListener("click", limpiarCamposCliente);
   if (inputBusqueda) {
     inputBusqueda.addEventListener("input", async (e) => {
       const texto = e.target.value;
@@ -642,11 +514,14 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       try {
-        const resp = await fetch(`${API_PRODUCTOS_URL}/buscar?termino=${texto}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`
+        const resp = await fetch(
+          `${API_PRODUCTOS_URL}/buscar?termino=${texto}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
           },
-        });
+        );
         if (!resp.ok) throw new Error("Error en la respuesta del servidor");
         const productos = await resp.json();
         mostrarSugerencias(productos);
@@ -670,17 +545,315 @@ document.addEventListener("DOMContentLoaded", () => {
       actualizarTotales();
     });
   }
-  if (cobrarIvaSwitch) cobrarIvaSwitch.addEventListener("change", actualizarTotales);
-
-  // --- Nuevos listeners para Flete y Referencia ---
-  if (fleteInput) fleteInput.addEventListener('input', actualizarTotales);
-  if (metodoPagoSelect) metodoPagoSelect.addEventListener('change', gestionarVisibilidadReferencia);
-
+  if (cobrarIvaSwitch)
+    cobrarIvaSwitch.addEventListener("change", actualizarTotales);
 
   // --- Ejecuciones Iniciales ---
   actualizarTotales();
-  gestionarVisibilidadReferencia(); // Para establecer el estado inicial correcto
+
+  // ===================================================================
+  // INICIO: NUEVA LÓGICA DE PAGOS COMBINADOS Y MODAL DE TOTALIZACIÓN
+  // ===================================================================
+
+  // Inicializar la instancia del modal para poder controlarla por JS
+  modalTotalizar = new bootstrap.Modal(
+    document.getElementById("modalTotalizar"),
+  );
+
+  // --- NUEVOS ELEMENTOS Y EVENTOS DEL MODAL AUTOMATIZADO ---
+  const inputMontoDolares = document.getElementById("inputMontoDolares");
+  const inputMontoBolivares = document.getElementById("inputMontoBolivares");
+  const inputReferenciaPago = document.getElementById("inputReferenciaPago");
+
+  inputMontoDolares.addEventListener("input", () => {
+    const tasa = parseFloat(tasaCambioInput.value) || 1;
+    const dolares = parseFloat(inputMontoDolares.value) || 0;
+    // Usamos un timeout de 0 para evitar conflictos si el usuario escribe muy rápido
+    setTimeout(() => {
+      inputMontoBolivares.value = (dolares * tasa).toFixed(2);
+    }, 0);
+  });
+
+  inputMontoBolivares.addEventListener("input", () => {
+    const tasa = parseFloat(tasaCambioInput.value) || 1;
+    const bolivares = parseFloat(inputMontoBolivares.value) || 0;
+    if (tasa > 0) {
+      setTimeout(() => {
+        inputMontoDolares.value = (bolivares / tasa).toFixed(2);
+      }, 0);
+    }
+  });
+
+  // NUEVO: Agilizar con Teclado (Enter para agregar pago)
+  const agregarPagoConEnter = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      // Simula clic en el botón para mantener la lógica centralizada
+      document.querySelector("button[onclick='agregarPago()']").click();
+    }
+  };
+
+  inputMontoDolares.addEventListener("keydown", agregarPagoConEnter);
+  inputMontoBolivares.addEventListener("keydown", agregarPagoConEnter);
+  inputReferenciaPago.addEventListener("keydown", agregarPagoConEnter);
+  document
+    .getElementById("selectMetodoPago")
+    .addEventListener("keydown", (e) => {
+      if (e.key === "Enter") e.preventDefault(); // Evita que se cierre el modal
+    });
+
+  // CRÍTICO: Listener para la tecla F3
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "F3") {
+      e.preventDefault(); // Evita el comportamiento por defecto del navegador
+      abrirModalTotalizar();
+    }
+  });
+
+  window.abrirModalTotalizar = function () {
+    totalFactura =
+      parseFloat(document.getElementById("totalVenta").textContent) || 0;
+
+    if (totalFactura <= 0) {
+      Swal.fire(
+        "Venta Vacía",
+        "Agregue productos a la venta antes de totalizar.",
+        "warning",
+      );
+      return;
+    }
+
+    // NUEVO: Actualizar tasa en el modal
+    const tasa = parseFloat(tasaCambioInput.value) || 1;
+    document.getElementById("tasaModal").textContent = tasa.toFixed(2);
+
+    listaPagos = [];
+    actualizarModalPagos();
+    modalTotalizar.show();
+    document.getElementById("inputMontoDolares").focus();
+  };
+
+  window.agregarPago = function () {
+    const metodo = document.getElementById("selectMetodoPago").value;
+    // Siempre tomamos el monto en dólares como la fuente de verdad
+    const monto =
+      parseFloat(document.getElementById("inputMontoDolares").value) || 0;
+    const referencia = document.getElementById("inputReferenciaPago").value;
+
+    const totalAbonado = listaPagos.reduce((acc, pago) => acc + pago.monto, 0);
+    const restante = totalFactura - totalAbonado;
+
+    if (monto <= 0) {
+      Swal.fire(
+        "Monto Inválido",
+        "El monto del pago debe ser mayor a cero.",
+        "error",
+      );
+      return;
+    }
+
+    // NUEVO: Bloqueo de excesos
+    if (monto > restante + 0.009) {
+      // Tolerancia para decimales
+      Swal.fire(
+        "Monto Excedido",
+        `El pago no puede ser mayor al saldo restante de $${restante.toFixed(2)}.`,
+        "warning",
+      );
+      return;
+    }
+
+    listaPagos.push({ metodo, monto, referencia });
+    actualizarModalPagos();
+
+    // Limpiar solo la referencia, los montos se actualizarán con el nuevo restante
+    document.getElementById("inputReferenciaPago").value = "";
+    document.getElementById("inputMontoDolares").focus(); // Foco vuelve al monto
+  };
+
+  function actualizarModalPagos() {
+    const totalAbonado = listaPagos.reduce((acc, pago) => acc + pago.monto, 0);
+    const restante = totalFactura - totalAbonado;
+    const tasa = parseFloat(tasaCambioInput.value) || 1;
+
+    // Actualizar resumen de la columna 1
+    document.getElementById("txtTotalPagarDolares").textContent =
+      `$${totalFactura.toFixed(2)}`;
+    document.getElementById("txtRestanteDolares").textContent =
+      `$${restante.toFixed(2)}`;
+    document.getElementById("txtRestante").textContent =
+      `${(restante * tasa).toFixed(2)} Bs`;
+    document.getElementById("txtTotalAbonado").textContent =
+      `${(totalAbonado * tasa).toFixed(2)} Bs`;
+
+    const tablaPagosBody = document.getElementById("tablaPagosAgregados");
+    tablaPagosBody.innerHTML = "";
+    listaPagos.forEach((pago, index) => {
+      const montoBs = (pago.monto * tasa).toFixed(2);
+      tablaPagosBody.innerHTML += `
+              <tr>
+                  <td>${pago.metodo}</td>
+                  <td>${pago.referencia || "-"}</td>
+                  <td>${montoBs} Bs</td>
+                  <td>
+                      <button class="btn btn-danger btn-sm" onclick="eliminarPago(${index})">X</button>
+                  </td>
+              </tr>
+          `;
+    });
+
+    const btnFinalizar = document.getElementById("btnFinalizarVenta");
+    const txtRestanteEl = document.getElementById("txtRestante");
+
+    // NUEVO: Sugerencia automática de monto restante
+    const inputDolares = document.getElementById("inputMontoDolares");
+    const inputBolivares = document.getElementById("inputMontoBolivares");
+
+    const restantePositivo = Math.max(0, restante); // No sugerir montos negativos
+    inputDolares.value = restantePositivo.toFixed(2);
+    inputBolivares.value = (restantePositivo * tasa).toFixed(2);
+
+    if (restante <= 0.009) {
+      // Tolerancia para decimales
+      btnFinalizar.disabled = false;
+      txtRestanteEl.classList.remove("text-danger");
+      txtRestanteEl.classList.add("text-success");
+      btnFinalizar.focus(); // Poner foco en el botón para finalizar con Enter
+    } else {
+      btnFinalizar.disabled = true;
+      txtRestanteEl.classList.add("text-danger");
+      txtRestanteEl.classList.remove("text-success");
+    }
+  }
+
+  window.eliminarPago = function (index) {
+    listaPagos.splice(index, 1);
+    actualizarModalPagos();
+  };
+
+  window.procesarVentaFinal = async function () {
+    if (!clienteActual || !clienteActual.id) {
+      Swal.fire(
+        "Cliente no definido",
+        "Por favor, busca o registra un cliente.",
+        "warning",
+      );
+      return;
+    }
+
+    const detalles = productosEnVenta
+      .map((p) => {
+        const fila = document.querySelector(`tr[data-producto-id="${p.id}"]`);
+        const cantidad = parseFloat(
+          fila.querySelector(".cantidad-producto").value,
+        );
+        const precio_unitario = parseFloat(
+          fila.querySelector(".cantidad-producto").dataset.precio,
+        );
+        return { id_producto: p.id, cantidad, precio_unitario };
+      })
+      .filter((d) => d.cantidad > 0);
+
+    if (detalles.length === 0) {
+      Swal.fire(
+        "Venta vacía",
+        "No hay productos con cantidad válida.",
+        "warning",
+      );
+      return;
+    }
+
+    const payload = {
+      id_cliente: clienteActual.id,
+      tasa_bcv: parseFloat(tasaCambioInput.value) || 1,
+      subtotal:
+        parseFloat(document.getElementById("subtotalVenta").textContent) || 0,
+      impuesto:
+        parseFloat(document.getElementById("ivaVenta").textContent) || 0,
+      total: totalFactura,
+      detalles: detalles,
+      pagos: listaPagos, // ¡El array de pagos que soluciona el error 400!
+    };
+
+    console.log("Enviando al backend:", JSON.stringify(payload, null, 2));
+
+    try {
+      Swal.fire({
+        title: "Procesando...",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      // CORRECCIÓN DE RUTA: Se apunta a /registrar como define ventas.routes.js
+      const response = await fetch(`${API_VENTAS_URL}/registrar`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || `Error ${response.status}`);
+      }
+
+      Swal.fire({
+        title: "¡Venta registrada!",
+        text: `Venta N° ${result.id_venta} procesada. ¿Deseas imprimir la Nota de Entrega?`,
+        icon: "success",
+        showCancelButton: true,
+        confirmButtonText: "Sí, imprimir",
+        cancelButtonText: "No, finalizar",
+      }).then(async (action) => {
+        if (action.isConfirmed) {
+          // CORRECCIÓN: Usar fetch para enviar el token y obtener el PDF
+          try {
+            const response = await fetch(
+              `${API_VENTAS_URL}/reporte/${result.id_venta}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${localStorage.getItem("token")}`,
+                },
+              },
+            );
+            if (!response.ok) throw new Error("No se pudo generar el PDF.");
+
+            const blob = await response.blob();
+            const pdfUrl = URL.createObjectURL(blob);
+            window.open(pdfUrl, "_blank");
+            setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000); // Limpiar memoria
+          } catch (pdfError) {
+            Swal.fire("Error de Reporte", pdfError.message, "error");
+          }
+        }
+        window.location.reload();
+      });
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        `No se pudo procesar la venta. Detalle: ${error.message}`,
+        "error",
+      );
+      console.error(error);
+    }
+  };
+
+  // NUEVO: Confirmación final con Enter
+  document
+    .getElementById("btnFinalizarVenta")
+    .addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.target.disabled) {
+        e.preventDefault();
+        procesarVentaFinal();
+      }
+    });
+
+  // ===================================================================
+  // FIN: NUEVA LÓGICA DE PAGOS COMBINADOS
+  // ===================================================================
 
   console.log("✅ Conexión exitosa: Listeners de Ventas activos");
 });
-
