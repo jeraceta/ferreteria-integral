@@ -1,6 +1,13 @@
 const pool = require("../db");
 const bcrypt = require("bcrypt");
 const { actualizarStockDeposito } = require("../services/inventario.service");
+const PDFDocument = require("pdfkit");
+const ExcelJS = require("exceljs");
+const { jsPDF } = require("jspdf");
+require("jspdf-autotable");
+const fs = require("fs");
+const path = require("path");
+const { getEmpresaConfig } = require("../config/empresa");
 
 // 1. OBTENER PRODUCTO POR ID
 const obtenerProductoPorId = async (req, res, next) => {
@@ -10,7 +17,7 @@ const obtenerProductoPorId = async (req, res, next) => {
   try {
     connection = await pool.getConnection();
     const [rows] = await connection.execute(
-      `SELECT p.*, c.nombre as nombre_categoria, p.marca,
+      `SELECT p.*, p.ubicacion, c.nombre as nombre_categoria, p.marca,
              (SELECT cantidad FROM stock_depositos WHERE id_producto = p.id AND id_deposito = 1) as stock_actual,
              (SELECT cantidad FROM stock_depositos WHERE id_producto = p.id AND id_deposito = 1) as stock_principal,
              (SELECT cantidad FROM stock_depositos WHERE id_producto = p.id AND id_deposito = 2) as stock_dañado,
@@ -39,6 +46,7 @@ const obtenerProductoPorId = async (req, res, next) => {
 const obtenerTodosLosProductos = async (req, res, next) => {
   let connection;
   try {
+    const { modoCliente } = req.query;
     connection = await pool.getConnection();
     const [rows] = await connection.execute(`
             SELECT 
@@ -47,6 +55,7 @@ const obtenerTodosLosProductos = async (req, res, next) => {
                 p.nombre, 
                 p.marca,
                 p.descripcion,
+                p.ubicacion,
                 p.precio_venta, 
                 p.precio_costo, 
                 p.id_categoria,
@@ -57,7 +66,31 @@ const obtenerTodosLosProductos = async (req, res, next) => {
             JOIN stock_depositos sd ON p.id = sd.id_producto
             WHERE sd.id_deposito = 1
         `);
-    res.status(200).json(rows);
+
+    let finalRows = rows;
+
+    // Si se solicita el modo cliente, ocultamos datos sensibles y calculamos disponibilidad visual
+    if (modoCliente === "true") {
+      finalRows = rows.map((r) => {
+        const { precio_costo, ubicacion, stock_actual, ...rest } = r;
+
+        // Lógica de disponibilidad para el semáforo del cliente
+        let disponibilidad = "agotado";
+        const stockNum = parseInt(stock_actual || 0, 10);
+        if (stockNum > 10) {
+          disponibilidad = "disponible";
+        } else if (stockNum > 0) {
+          disponibilidad = "pocas";
+        }
+
+        return {
+          ...rest,
+          disponibilidad,
+        };
+      });
+    }
+
+    res.status(200).json(finalRows);
   } catch (error) {
     next(error);
   } finally {
@@ -329,6 +362,7 @@ const crearProducto = async (req, res, next) => {
       id_categoria = null,
       stock = 0,
       stock_minimo = 2,
+      ubicacion = "Sin ubicación", // <-- ¡El nuevo campo de ubicación en estanterla!
     } = datos;
 
     // Validación básica para evitar el crash
@@ -357,8 +391,8 @@ const crearProducto = async (req, res, next) => {
     // Lógica de INSERT con todas las columnas correctas
     const sqlProd = `
       INSERT INTO productos 
-      (codigo, nombre, marca, descripcion, precio_venta, precio_costo, id_categoria, stock_minimo, stock) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      (codigo, nombre, marca, descripcion, precio_venta, precio_costo, id_categoria, stock_minimo, stock, ubicacion) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     const [resProd] = await connection.execute(sqlProd, [
       codigo,
       nombre,
@@ -369,6 +403,7 @@ const crearProducto = async (req, res, next) => {
       id_categoria,
       stock_minimo,
       stock,
+      ubicacion,
     ]);
 
     const nuevoId = resProd.insertId;
@@ -570,21 +605,22 @@ async function obtenerVentasPorMetodoPago(fechaInicio, fechaFin) {
   const params = [];
   let query = `
         SELECT
-            metodo_pago,
-            COUNT(id) AS cantidad_transacciones,
-            IFNULL(SUM(total), 0) AS total_recaudado  -- CAMBIADO: total_bruto -> total
-        FROM ventas
+            vp.metodo_pago,
+            COUNT(DISTINCT v.id) AS cantidad_transacciones,
+            IFNULL(SUM(vp.monto_pago), 0) AS total_recaudado
+        FROM ventas v
+        JOIN venta_pagos vp ON v.id = vp.id_venta
     `;
 
   const whereConditions = [];
   if (fechaInicio && fechaFin) {
-    whereConditions.push(`DATE(fecha_venta) BETWEEN ? AND ?`);
+    whereConditions.push(`DATE(v.fecha_venta) BETWEEN ? AND ?`);
     params.push(fechaInicio, fechaFin);
   } else if (fechaInicio) {
-    whereConditions.push(`DATE(fecha_venta) >= ?`);
+    whereConditions.push(`DATE(v.fecha_venta) >= ?`);
     params.push(fechaInicio);
   } else if (fechaFin) {
-    whereConditions.push(`DATE(fecha_venta) <= ?`);
+    whereConditions.push(`DATE(v.fecha_venta) <= ?`);
     params.push(fechaFin);
   }
 
@@ -593,7 +629,7 @@ async function obtenerVentasPorMetodoPago(fechaInicio, fechaFin) {
   }
 
   query += `
-        GROUP BY metodo_pago
+        GROUP BY vp.metodo_pago
         ORDER BY total_recaudado DESC
     `;
 
@@ -919,10 +955,45 @@ async function trasladarMercancia(
     connection.release();
   }
 }
-async function actualizarProducto(id, datos) {
+async function actualizarProducto(req, id, datos) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+
+    // 🔒 VALIDACIÓN DE PERMISOS: Verificar si el usuario puede modificar precios/stock
+    const esAdministrador =
+      req.user &&
+      req.user.rol &&
+      req.user.rol.toLowerCase() === "administrador";
+
+    if (!esAdministrador) {
+      // 🚫 Vendedores NO pueden modificar precios ni stock
+      const productoActual = await connection.execute(
+        "SELECT precio_venta, precio_costo, stock_minimo FROM productos WHERE id = ?",
+        [id],
+      );
+
+      if (productoActual[0].length > 0) {
+        const actual = productoActual[0][0];
+
+        // Verificar si intentan cambiar precios
+        if (
+          datos.precio_venta != actual.precio_venta ||
+          datos.precio_costo != actual.precio_costo
+        ) {
+          throw new Error(
+            "Permisos insuficientes. Solo administradores pueden modificar precios.",
+          );
+        }
+
+        // Verificar si intentan cambiar stock mínimo
+        if (datos.stock_minimo != actual.stock_minimo) {
+          throw new Error(
+            "Permisos insuficientes. Solo administradores pueden modificar stock mínimo.",
+          );
+        }
+      }
+    }
 
     // Validar que el código no lo tenga OTRO producto diferente al que estamos editando
     const [existe] = await connection.execute(
@@ -936,16 +1007,22 @@ async function actualizarProducto(id, datos) {
       );
     }
 
+    // ✏️ Actualizamos todos los campos incluyendo la ubicación en el estante
     const [res] = await connection.execute(
-      `UPDATE productos 
-             SET codigo = ?, nombre = ?, marca = ?, precio_venta = ?, precio_costo = ? 
+      `UPDATE productos
+             SET codigo = ?, nombre = ?, marca = ?, descripcion = ?, precio_venta = ?, precio_costo = ?,
+                 id_categoria = ?, stock_minimo = ?, ubicacion = ?
              WHERE id = ?`,
       [
         datos.codigo,
         datos.nombre,
-        datos.marca,
+        datos.marca || null,
+        datos.descripcion || "",
         datos.precio_venta,
         datos.precio_costo,
+        datos.id_categoria || null,
+        datos.stock_minimo || 2,
+        datos.ubicacion || "Sin ubicación",
         id,
       ],
     );
@@ -1154,6 +1231,712 @@ const buscarProductosPredictivo = async (req, res, next) => {
   }
 };
 
+// ====================================================================
+// CONSULTAR INVENTARIO — Endpoint flexible con filtros y ordenamiento
+// ====================================================================
+const consultarInventario = async (req, res, next) => {
+  const {
+    deposito = "todos",
+    categoria = "",
+    ordenar = "nombre",
+    direccion = "ASC",
+    modoCliente = "false",
+  } = req.query;
+
+  let connection;
+  try {
+    connection = await pool.getConnection();
+
+    // Columnas permitidas para ORDER BY (prevenir SQL injection)
+    const columnasPermitidas = {
+      nombre: "p.nombre",
+      codigo: "p.codigo",
+      precio_venta: "p.precio_venta",
+      precio_costo: "p.precio_costo",
+      categoria: "c.nombre",
+      stock: "sd.cantidad",
+    };
+    const columnaOrden = columnasPermitidas[ordenar] || "p.nombre";
+    const dir = direccion.toUpperCase() === "DESC" ? "DESC" : "ASC";
+
+    let query = `
+      SELECT 
+        p.id, p.codigo, p.nombre, p.marca, p.descripcion,
+        p.precio_venta, p.precio_costo, p.id_categoria,
+        p.ubicacion,
+        c.nombre AS nombre_categoria,
+        sd.cantidad AS stock_actual,
+        sd.id_deposito
+      FROM productos p
+      LEFT JOIN categorias c ON p.id_categoria = c.id
+      JOIN stock_depositos sd ON p.id = sd.id_producto
+    `;
+
+    const where = [];
+    const params = [];
+
+    // Filtro por depósito
+    if (deposito && deposito !== "todos") {
+      where.push("sd.id_deposito = ?");
+      params.push(parseInt(deposito));
+    }
+
+    // Filtro por categoría
+    if (categoria) {
+      where.push("p.id_categoria = ?");
+      params.push(parseInt(categoria));
+    }
+
+    if (where.length > 0) {
+      query += " WHERE " + where.join(" AND ");
+    }
+
+    query += ` ORDER BY ${columnaOrden} ${dir}`;
+
+    const [rows] = await connection.execute(query, params);
+
+    // Si es modo cliente, eliminamos datos sensibles
+    let finalRows = rows;
+    if (modoCliente === "true") {
+      finalRows = rows.map((r) => {
+        const { precio_costo, ubicacion, stock_actual, ...rest } = r;
+        // Calculamos disponibilidad para el dot en el backend si se desea,
+        // pero el requerimiento pide el indicador visual.
+        // Enviamos un flag de disponibilidad simplificado.
+        let disponibilidad = "agotado";
+        if (stock_actual > 10) disponibilidad = "disponible";
+        else if (stock_actual > 0) disponibilidad = "pocas";
+
+        return {
+          ...rest,
+          disponibilidad,
+        };
+      });
+    }
+
+    res.json({ success: true, data: finalRows });
+  } catch (error) {
+    next(error);
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+// ====================================================================
+// GENERAR REPORTE PDF DE INVENTARIO — Streaming con PDFKit
+// ====================================================================
+const generarReporteInventarioPDF = async (req, res, next) => {
+  const {
+    deposito = "todos",
+    categoria = "",
+    ordenar = "nombre",
+    direccion = "ASC",
+    incluirDescripcion = "false",
+    incluirConteoFisico = "false",
+  } = req.query;
+
+  let connection;
+  try {
+    // 1. Obtener datos de la empresa (Centralizado desde DB)
+    const [empresaData] = await pool.query(
+      "SELECT razon_social AS nombre, rif, direccion, telefono, logo_path FROM empresa_datos WHERE id = 1",
+    );
+    const configEstática = getEmpresaConfig();
+    const empresa = empresaData.length > 0 ? empresaData[0] : {
+      nombre: configEstática.nombre,
+      rif: configEstática.rif,
+      direccion: configEstática.direccion,
+      telefono: configEstática.telefono,
+      logo_path: null
+    };
+    empresa.email = configEstática.email;
+
+    connection = await pool.getConnection();
+
+    // Construir query
+    const columnasPermitidas = {
+      nombre: "p.nombre",
+      codigo: "p.codigo",
+      precio_venta: "p.precio_venta",
+      precio_costo: "p.precio_costo",
+      categoria: "c.nombre",
+      stock: "sd.cantidad",
+    };
+    const columnaOrden = columnasPermitidas[ordenar] || "p.nombre";
+    const dir = direccion.toUpperCase() === "DESC" ? "DESC" : "ASC";
+
+    let query = `
+      SELECT 
+        p.id, p.codigo, p.nombre, p.marca, p.descripcion,
+        p.precio_venta, p.precio_costo,
+        c.nombre AS nombre_categoria,
+        sd.cantidad AS stock_actual,
+        sd.id_deposito
+      FROM productos p
+      LEFT JOIN categorias c ON p.id_categoria = c.id
+      JOIN stock_depositos sd ON p.id = sd.id_producto
+    `;
+
+    const where = [];
+    const params = [];
+
+    if (deposito && deposito !== "todos") {
+      where.push("sd.id_deposito = ?");
+      params.push(parseInt(deposito));
+    }
+    if (categoria) {
+      where.push("p.id_categoria = ?");
+      params.push(parseInt(categoria));
+    }
+    if (where.length > 0) {
+      query += " WHERE " + where.join(" AND ");
+    }
+    query += ` ORDER BY ${columnaOrden} ${dir}`;
+
+    const [productos] = await connection.execute(query, params);
+
+    const nombresDeposito = {
+      1: "Depósito Principal",
+      2: "Mercancía Dañada",
+      3: "Inmovilizado / Cuarentena",
+      todos: "Todos los Depósitos",
+    };
+    const nombreDeposito = nombresDeposito[deposito] || "Todos los Depósitos";
+
+    let nombreCategoria = "Todas las categorías";
+    if (categoria) {
+      const [catRow] = await connection.execute(
+        "SELECT nombre FROM categorias WHERE id = ?",
+        [parseInt(categoria)],
+      );
+      if (catRow.length > 0) nombreCategoria = catRow[0].nombre;
+    }
+
+    const mostrarDescripcion = incluirDescripcion === "true";
+    const mostrarConteo = incluirConteoFisico === "true";
+
+    // ======== GENERAR PDF CON JSPDF (Estandarizado) ========
+    const doc = new jsPDF();
+    doc.setLineWidth(0.01);
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    // --- LOGO ---
+    let logoBase64;
+    if (empresa.logo_path) {
+      try {
+        const fullLogoPath = path.join(__dirname, "..", empresa.logo_path);
+        if (fs.existsSync(fullLogoPath)) {
+          logoBase64 = fs.readFileSync(fullLogoPath).toString("base64");
+        }
+      } catch (e) {
+        console.error("Error logo Inventario:", e);
+      }
+    }
+
+    // --- ENCABEZADO ESTANDARIZADO ---
+    let currentY = 15;
+    if (logoBase64) {
+      doc.addImage(logoBase64, "PNG", 14, currentY, 25, 25);
+    }
+    
+    const textStartX = 45;
+    const maxTextWidth = pageWidth - textStartX - 15;
+
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    const nombreSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
+    doc.text(nombreSplit, textStartX, currentY + 5);
+    
+    currentY += 5 + (nombreSplit.length * 5);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`RIF: ${empresa.rif}`, textStartX, currentY);
+    
+    currentY += 5;
+    const dirSplit = doc.splitTextToSize(`Dirección: ${empresa.direccion}`, maxTextWidth);
+    doc.text(dirSplit, textStartX, currentY);
+    
+    currentY += (dirSplit.length * 4);
+    doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX, currentY);
+
+    // Título del reporte y fecha (Derecha) - Ajustado Y para evitar overlap
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("REPORTE DE INVENTARIO", pageWidth - 15, 35, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, pageWidth - 15, 42, { align: "right" });
+    
+    // Subtítulo de filtros
+    currentY = Math.max(currentY + 10, 45);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Depósito: `, 14, currentY);
+    doc.setFont("helvetica", "normal");
+    doc.text(nombreDeposito, 32, currentY);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text(`Categoría: `, 80, currentY);
+    doc.setFont("helvetica", "normal");
+    doc.text(nombreCategoria, 100, currentY);
+
+    // --- TABLA ---
+    const headers = [["Código", "Producto", "Marca", "Categoría", "Stock"]];
+    if (mostrarConteo) headers[0].push("Conteo Físico");
+    
+    const body = productos.map(p => {
+        const row = [p.codigo, p.nombre, p.marca || "", p.nombre_categoria || "", p.stock_actual];
+        if (mostrarConteo) row.push("_______");
+        return row;
+    });
+
+    doc.autoTable({
+        startY: currentY + 5,
+        head: headers,
+        body: body,
+        theme: "grid",
+        headStyles: { fillColor: [26, 82, 118], textColor: 255 },
+        styles: { fontSize: 8, lineWidth: 0.01 },
+        margin: { left: 14, right: 14 }
+    });
+
+    const pdfBuffer = doc.output("arraybuffer");
+    res.contentType("application/pdf");
+    res.send(Buffer.from(pdfBuffer));
+  } catch (error) {
+    next(error);
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+// ====================================================================
+// EXPORTAR INVENTARIO A EXCEL — Con fórmulas y formato profesional
+// ====================================================================
+const exportarInventarioExcel = async (req, res, next) => {
+  const {
+    deposito = "todos",
+    categoria = "",
+    ordenar = "nombre",
+    direccion = "ASC",
+    incluirDescripcion = "false",
+  } = req.query;
+
+  let connection;
+  try {
+    // 1. Obtener datos de la empresa (Centralizado desde DB)
+    const [empresaData] = await pool.query(
+      "SELECT razon_social AS nombre, rif, direccion, telefono, logo_path FROM empresa_datos WHERE id = 1",
+    );
+    const configEstática = getEmpresaConfig();
+    const empresa = empresaData.length > 0 ? empresaData[0] : {
+      nombre: configEstática.nombre,
+      rif: configEstática.rif,
+      direccion: configEstática.direccion,
+      telefono: configEstática.telefono,
+      logo_path: null
+    };
+    empresa.email = configEstática.email;
+    connection = await pool.getConnection();
+
+    // Lógica de consulta (IDÉNTICA a consultarInventario para consistencia)
+    const columnasPermitidas = {
+      nombre: "p.nombre",
+      codigo: "p.codigo",
+      precio_venta: "p.precio_venta",
+      precio_costo: "p.precio_costo",
+      categoria: "c.nombre",
+      stock: "sd.cantidad",
+    };
+    const columnaOrden = columnasPermitidas[ordenar] || "p.nombre";
+    const dirStr = direccion.toUpperCase() === "DESC" ? "DESC" : "ASC";
+
+    let query = `
+      SELECT 
+        p.id, p.codigo, p.nombre, p.marca, p.descripcion,
+        p.precio_venta, p.precio_costo,
+        c.nombre AS nombre_categoria,
+        sd.cantidad AS stock_actual,
+        sd.id_deposito
+      FROM productos p
+      LEFT JOIN categorias c ON p.id_categoria = c.id
+      JOIN stock_depositos sd ON p.id = sd.id_producto
+    `;
+
+    const where = [];
+    const params = [];
+
+    if (deposito && deposito !== "todos") {
+      where.push("sd.id_deposito = ?");
+      params.push(parseInt(deposito));
+    }
+    if (categoria) {
+      where.push("p.id_categoria = ?");
+      params.push(parseInt(categoria));
+    }
+    if (where.length > 0) {
+      query += " WHERE " + where.join(" AND ");
+    }
+    query += ` ORDER BY ${columnaOrden} ${dirStr}`;
+
+    const [productos] = await connection.execute(query, params);
+
+    // Sanitizar datos para Excel
+    const rowsSanitized = productos.map((row) => {
+      const newRow = { ...row };
+      Object.keys(newRow).forEach((key) => {
+        if (newRow[key] === null || newRow[key] === undefined) {
+          newRow[key] = "";
+        }
+      });
+      return newRow;
+    });
+
+    // Nombre del depósito para el título
+    const nombresDeposito = {
+      1: "Depósito Principal",
+      2: "Mercancía Dañada",
+      3: "Inmovilizado / Cuarentena",
+      todos: "Todos los Depósitos",
+    };
+    const nombreDeposito = nombresDeposito[deposito] || "Todos los Depósitos";
+
+    // Nombre de categoría
+    let nombreCategoria = "Todas las categorías";
+    if (categoria) {
+      const [catRow] = await connection.execute(
+        "SELECT nombre FROM categorias WHERE id = ?",
+        [parseInt(categoria)],
+      );
+      if (catRow.length > 0) nombreCategoria = catRow[0].nombre;
+    }
+
+    // ======== CREACIÓN DEL LIBRO EXCEL ========
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Inventario");
+
+    // --- ENCABEZADO CORPORATIVO ---
+    const logoPath = path.join(__dirname, "../../Frontend/img/logo.png");
+    const logoExists = fs.existsSync(logoPath);
+
+    if (logoExists) {
+      const imageId = workbook.addImage({
+        filename: logoPath,
+        extension: "png",
+      });
+      sheet.addImage(imageId, {
+        tl: { col: 0.1, row: 0.1 },
+        ext: { width: 100, height: 60 },
+      });
+    }
+
+    // Datos de la empresa (Filas 1-4)
+    sheet.mergeCells("B1:D1");
+    const cellNombre = sheet.getCell("B1");
+    cellNombre.value = empresa.nombre;
+    cellNombre.font = {
+      name: "Arial Black",
+      size: 14,
+      color: { argb: "1A5276" },
+    };
+
+    sheet.mergeCells("B2:D2");
+    sheet.getCell("B2").value = `RIF: ${empresa.rif}`;
+    sheet.mergeCells("B3:D3");
+    sheet.getCell("B3").value = empresa.direccion;
+    sheet.mergeCells("B4:D4");
+    sheet.getCell("B4").value = `Teléfono: ${empresa.telefono} | Email: ${empresa.email || ""}`;
+
+    // Título del Reporte (Derecha)
+    sheet.mergeCells("F1:H2");
+    const cellTitulo = sheet.getCell("F1");
+    cellTitulo.value = "REPORTE DE INVENTARIO";
+    cellTitulo.font = { size: 16, bold: true, color: { argb: "1A5276" } };
+    cellTitulo.alignment = { horizontal: "right", vertical: "middle" };
+
+    const fechaActual = new Date().toLocaleDateString("es-VE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    sheet.mergeCells("F3:H3");
+    const cellFecha = sheet.getCell("F3");
+    cellFecha.value = `Fecha: ${fechaActual}`;
+    cellFecha.alignment = { horizontal: "right" };
+    cellFecha.font = { size: 9, color: { argb: "555555" } };
+
+    // Línea divisoria
+    sheet.getRow(6).border = {
+      bottom: { style: "thick", color: { argb: "1A5276" } },
+    };
+
+    // Filtros
+    sheet.getCell("A7").value = "Depósito:";
+    sheet.getCell("A7").font = { bold: true, color: { argb: "1A5276" } };
+    sheet.getCell("B7").value = nombreDeposito;
+
+    sheet.getCell("E7").value = "Categoría:";
+    sheet.getCell("E7").font = { bold: true, color: { argb: "1A5276" } };
+    sheet.getCell("F7").value = nombreCategoria;
+
+    sheet.getCell("A8").value = "Orden:";
+    sheet.getCell("A8").font = { bold: true, color: { argb: "1A5276" } };
+    const ordenTextos = {
+      nombre: "Nombre",
+      codigo: "Código",
+      precio_venta: "Precio Venta",
+      precio_costo: "Precio Costo",
+      categoria: "Categoría",
+      stock: "Stock",
+    };
+    const currentDir =
+      direccion.toUpperCase() === "DESC" ? "Descendente" : "Ascendente";
+    sheet.getCell("B8").value =
+      `${ordenTextos[ordenar] || "Nombre"} (${currentDir})`;
+
+    sheet.getCell("E8").value = "Total productos:";
+    sheet.getCell("E8").font = { bold: true, color: { argb: "1A5276" } };
+    sheet.getCell("F8").value = productos.length;
+
+    // --- TABLA DE DATOS (Inicia en fila 10) ---
+    const startRow = 10;
+    const colsDefinition = [
+      { header: "Código", key: "codigo", width: 15 },
+      { header: "Producto", key: "nombre", width: 35 },
+      { header: "Marca", key: "marca", width: 15 },
+      { header: "Categoría", key: "categoria", width: 20 },
+    ];
+
+    if (incluirDescripcion === "true") {
+      colsDefinition.push({
+        header: "Descripción",
+        key: "descripcion",
+        width: 40,
+      });
+    }
+
+    colsDefinition.push(
+      { header: "Stock", key: "stock", width: 10 },
+      { header: "Costo Unit. ($)", key: "costo", width: 15 },
+      { header: "Precio Venta ($)", key: "precio", width: 15 },
+      { header: "Valor Total Stock ($)", key: "valor_total", width: 20 },
+    );
+
+    // Aplicar encabezados
+    const headerRow = sheet.getRow(startRow);
+    colsDefinition.forEach((col, i) => {
+      const cell = headerRow.getCell(i + 1);
+      cell.value = col.header;
+      sheet.getColumn(i + 1).key = col.key;
+      sheet.getColumn(i + 1).width = col.width;
+    });
+
+    // Estilo al encabezado de la tabla
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFF" } };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "2C3E50" },
+      };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+    });
+
+    // Agregar datos
+    rowsSanitized.forEach((prod, index) => {
+      const rowNum = startRow + index + 1;
+      const rowData = {
+        codigo: prod.codigo,
+        nombre: prod.nombre,
+        marca: prod.marca || "—",
+        categoria: prod.nombre_categoria || "Sin cat.",
+        stock: parseInt(prod.stock_actual || 0),
+        costo: parseFloat(prod.precio_costo || 0),
+        precio: parseFloat(prod.precio_venta || 0),
+        valor_total: {
+          formula: `${sheet.getColumn("stock").letter}${rowNum} * ${sheet.getColumn("costo").letter}${rowNum}`,
+        },
+      };
+
+      if (incluirDescripcion === "true") {
+        rowData.descripcion = prod.descripcion || "—";
+      }
+
+      const row = sheet.addRow(rowData);
+      row.getCell("stock").alignment = { horizontal: "center" };
+    });
+
+    // Formatear columnas
+    sheet.getColumn("costo").numFmt = '"$"#,##0.00';
+    sheet.getColumn("precio").numFmt = '"$"#,##0.00';
+    sheet.getColumn("valor_total").numFmt = '"$"#,##0.00';
+
+    // ======== FILA DE TOTALES ========
+    const lastDataRow = startRow + productos.length;
+    const totalRow = sheet.addRow({});
+
+    const stockColLetter = sheet.getColumn("stock").letter;
+    const valorColLetter = sheet.getColumn("valor_total").letter;
+
+    const labelCell = totalRow.getCell(sheet.getColumn("precio").letter);
+    labelCell.value = "VALORACIÓN TOTAL:";
+    labelCell.font = { bold: true };
+    labelCell.alignment = { horizontal: "right" };
+
+    totalRow.getCell("stock").value = {
+      formula: `SUM(${stockColLetter}${startRow + 1}:${stockColLetter}${lastDataRow})`,
+    };
+    totalRow.getCell("valor_total").value = {
+      formula: `SUM(${valorColLetter}${startRow + 1}:${valorColLetter}${lastDataRow})`,
+    };
+
+    totalRow.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.border = { top: { style: "medium" } };
+    });
+    totalRow.getCell("valor_total").numFmt = '"$"#,##0.00';
+    totalRow.getCell("valor_total").fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "F1C40F" },
+    };
+
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const fileName = `inventario_${timestamp}.xlsx`;
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    next(error);
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+// ============================================
+// FUNCIONES DEL DASHBOARD
+// ============================================
+
+/**
+ * obtenerVentasMensuales – Últimos 6 meses de ventas agrupados por mes.
+ * Usado para el gráfico de líneas "Tendencia de Ventas".
+ */
+async function obtenerVentasMensuales() {
+  const [rows] = await pool.execute(`
+    SELECT 
+      DATE_FORMAT(v.fecha_venta, '%Y-%m') AS mes,
+      DATE_FORMAT(v.fecha_venta, '%b %Y') AS etiqueta,
+      COUNT(v.id) AS total_transacciones,
+      IFNULL(SUM(v.total), 0) AS total_ventas
+    FROM ventas v
+    WHERE v.fecha_venta >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+    GROUP BY mes, etiqueta
+    ORDER BY mes ASC
+  `);
+  return rows;
+}
+
+/**
+ * obtenerGananciasHoy – Resumen financiero del día actual.
+ * Devuelve ingresos, costo de mercancía y utilidad neta del día.
+ */
+async function obtenerGananciasHoy() {
+  const [rows] = await pool.execute(`
+    SELECT 
+      COUNT(DISTINCT v.id) AS total_ventas,
+      IFNULL(SUM(dv.cantidad * dv.precio_unitario), 0) AS ingresos_totales,
+      IFNULL(SUM(dv.cantidad * p.precio_costo), 0) AS costo_mercancia,
+      IFNULL(SUM(dv.cantidad * dv.precio_unitario) - SUM(dv.cantidad * p.precio_costo), 0) AS utilidad_neta
+    FROM ventas v
+    JOIN detalle_ventas dv ON v.id = dv.id_venta
+    JOIN productos p ON dv.id_producto = p.id
+    WHERE DATE(v.fecha_venta) = CURDATE()
+  `);
+  return rows[0];
+}
+
+/**
+ * obtenerLoMasVendido – Top 5 productos para widget.
+ */
+async function obtenerLoMasVendido() {
+  const [rows] = await pool.execute(`
+    SELECT 
+      p.nombre AS producto,
+      p.codigo,
+      SUM(dv.cantidad) AS cantidad_vendida,
+      SUM(dv.cantidad * dv.precio_unitario) AS total_generado
+    FROM detalle_ventas dv
+    JOIN productos p ON dv.id_producto = p.id
+    JOIN ventas v ON dv.id_venta = v.id
+    GROUP BY p.id, p.nombre, p.codigo
+    ORDER BY cantidad_vendida DESC
+    LIMIT 5
+  `);
+  return rows;
+}
+
+/**
+ * obtenerDashboardKPIs – Endpoint combinado para las 4 tarjetas KPI del dashboard.
+ * 1. Ventas del Día: sumatoria total de ventas realizadas hoy.
+ * 2. Ganancia Estimada del Mes: ingresos – costos del mes actual.
+ * 3. Transacciones del día: número de ventas registradas hoy.
+ * 4. Producto Top del mes: producto que más utilidad generó este mes.
+ */
+async function obtenerDashboardKPIs() {
+  // 1 & 3. Ventas del día y número de transacciones
+  const [ventasDia] = await pool.execute(`
+    SELECT 
+      COUNT(DISTINCT v.id) AS transacciones_hoy,
+      IFNULL(SUM(v.total), 0) AS total_ventas_hoy
+    FROM ventas v
+    WHERE DATE(v.fecha_venta) = CURDATE()
+  `);
+
+  // 2. Ganancia estimada del mes (ingresos - costos)
+  const [gananciasMes] = await pool.execute(`
+    SELECT 
+      IFNULL(SUM(dv.cantidad * dv.precio_unitario), 0) AS ingresos_mes,
+      IFNULL(SUM(dv.cantidad * p.precio_costo), 0) AS costo_mes,
+      IFNULL(SUM(dv.cantidad * dv.precio_unitario) - SUM(dv.cantidad * p.precio_costo), 0) AS ganancia_estimada
+    FROM ventas v
+    JOIN detalle_ventas dv ON v.id = dv.id_venta
+    JOIN productos p ON dv.id_producto = p.id
+    WHERE MONTH(v.fecha_venta) = MONTH(CURDATE()) AND YEAR(v.fecha_venta) = YEAR(CURDATE())
+  `);
+
+  // 4. Producto que más utilidad genera este mes
+  const [topProducto] = await pool.execute(`
+    SELECT 
+      p.nombre AS producto,
+      IFNULL(SUM((dv.precio_unitario - p.precio_costo) * dv.cantidad), 0) AS utilidad
+    FROM detalle_ventas dv
+    JOIN productos p ON dv.id_producto = p.id
+    JOIN ventas v ON dv.id_venta = v.id
+    WHERE MONTH(v.fecha_venta) = MONTH(CURDATE()) AND YEAR(v.fecha_venta) = YEAR(CURDATE())
+    GROUP BY p.id, p.nombre
+    ORDER BY utilidad DESC
+    LIMIT 1
+  `);
+
+  return {
+    ventas_hoy: parseFloat(ventasDia[0].total_ventas_hoy) || 0,
+    transacciones_hoy: parseInt(ventasDia[0].transacciones_hoy) || 0,
+    ganancia_estimada_mes: parseFloat(gananciasMes[0].ganancia_estimada) || 0,
+    producto_top:
+      topProducto.length > 0 ? topProducto[0].producto : "Sin datos",
+    producto_top_utilidad:
+      topProducto.length > 0 ? parseFloat(topProducto[0].utilidad) : 0,
+  };
+}
+
 module.exports = {
   procesarNuevaCompra,
   obtenerProductoPorId,
@@ -1167,6 +1950,7 @@ module.exports = {
   obtenerValoracionInventario,
   obtenerStockCritico,
   obtenerGananciasTienda,
+  obtenerGananciasHoy,
   obtenerVentasPorVendedor,
   registrarUsuario,
   obtenerUsuarios,
@@ -1184,7 +1968,12 @@ module.exports = {
   obtenerTodasLasCategorias,
   eliminarProducto,
   buscarProductosPredictivo,
-  realizarVenta, // Nueva función
-  procesarDevolucionInteligente, // Nueva función
-  moverAInmovilizado, // Nueva función
+  realizarVenta,
+  procesarDevolucionInteligente,
+  moverAInmovilizado,
+  consultarInventario,
+  generarReporteInventarioPDF,
+  exportarInventarioExcel,
+  obtenerLoMasVendido,
+  obtenerDashboardKPIs,
 };

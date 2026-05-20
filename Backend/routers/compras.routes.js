@@ -1,28 +1,15 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-// Importamos el controlador 
-const inventarioController = require('../inventario.controller');
-const { esAdmin } = require('../middlewares/auth.middleware');
-const { body, validationResult } = require('express-validator');
+const comprasController = require("../controllers/compras.controller");
+const { requiereAuth } = require("../middlewares/auth.middleware");
 
-// Las compras solo pueden ser realizadas por gerentes
-router.post('/comprar',
-    esAdmin,
-    body('datosCompra').exists().withMessage('datosCompra es requerido'),
-    body('detalle').isArray().withMessage('detalle debe ser un arreglo'),
-    async (req, res, next) => {
-    try {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) return next({ status: 400, message: 'Validación fallida', detail: errors.array() });
-
-        const { datosCompra, detalle } = req.body;
-        const resultado = await inventarioController.procesarNuevaCompra(datosCompra, detalle);
-
-        res.status(201).json(resultado);
-    } catch (error) {
-        console.error("Error en compras:", error.message);
-        next(error);
-    }
-});
+router.post("/registrar", requiereAuth, comprasController.registrarCompra);
+router.get("/", requiereAuth, comprasController.obtenerCompras);
+router.get("/exportar-excel", requiereAuth, comprasController.exportarExcel);
+router.get(
+  "/reporte/:id",
+  requiereAuth,
+  comprasController.generarReporteCompra,
+);
 
 module.exports = router;

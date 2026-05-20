@@ -8,9 +8,6 @@
     <a href="dashboard.html" class="list-group-item list-group-item-action">
       <i class="fas fa-home me-2"></i>Dashboard
     </a>
-    <a href="inventario.html" class="list-group-item list-group-item-action">
-      <i class="fas fa-boxes me-2"></i>Inventario
-    </a>
     <a
       href="#ventasSubmenu"
       data-bs-toggle="collapse"
@@ -37,29 +34,102 @@
         ><i class="fas fa-cash-register me-2"></i>Cierre de Caja</a
       >
       <a
+        href="historial-cierres.html"
+        class="list-group-item list-group-item-action sub-item"
+        id="menu-historial-cierres"
+        ><i class="fas fa-archive me-2"></i>Historial de Cierres</a
+      >
+      <a
         href="presupuestos.html"
         class="list-group-item list-group-item-action sub-item"
         ><i class="fas fa-file-alt me-2"></i>Presupuestos</a
       >
     </div>
-    <a href="clientes.html" class="list-group-item list-group-item-action">
-      <i class="fas fa-users me-2"></i>Clientes
-    </a>
-    <a href="productos.html" class="list-group-item list-group-item-action">
-      <i class="fas fa-box me-2"></i>Productos
-    </a>
+
+    <!-- Módulo de Compras -->
     <a
-      href="usuarios.html"
-      id="nav-usuarios"
+      href="#comprasSubmenu"
+      data-bs-toggle="collapse"
+      class="list-group-item list-group-item-action ventas-dropdown-toggle"
+    >
+      <i class="fas fa-truck-loading me-2"></i>Compras
+      <i class="fas fa-chevron-down float-end"></i>
+    </a>
+    <div class="collapse" id="comprasSubmenu">
+      <a
+        href="compras.html"
+        class="list-group-item list-group-item-action sub-item"
+        ><i class="fas fa-plus-circle me-2"></i>Nueva Compra</a
+      >
+      <a
+        href="gestion-compras.html"
+        class="list-group-item list-group-item-action sub-item"
+        ><i class="fas fa-history me-2"></i>Historial de Compras</a
+      >
+    </div>
+
+    <!-- Nuevo Grupo Administrativo -->
+    <a
+      href="#adminSubmenu"
+      data-bs-toggle="collapse"
+      class="list-group-item list-group-item-action ventas-dropdown-toggle"
+    >
+      <i class="fas fa-cogs me-2"></i>Administrativo
+      <i class="fas fa-chevron-down float-end"></i>
+    </a>
+    <div class="collapse" id="adminSubmenu">
+      <a
+        href="clientes.html"
+        class="list-group-item list-group-item-action sub-item"
+      >
+        <i class="fas fa-users me-2"></i>Clientes
+      </a>
+      <a
+        href="tesoreria.html"
+        class="list-group-item list-group-item-action sub-item"
+        id="menu-tesoreria"
+      >
+        <i class="fas fa-wallet me-2"></i>Tesorería (CxC/CxP)
+      </a>
+      <a
+        href="proveedores.html"
+        class="list-group-item list-group-item-action sub-item"
+      >
+        <i class="fas fa-truck me-2"></i>Proveedores
+      </a>
+      <a
+        href="productos.html"
+        class="list-group-item list-group-item-action sub-item"
+      >
+        <i class="fas fa-box me-2"></i>Productos
+      </a>
+      <a
+        href="inventario.html"
+        class="list-group-item list-group-item-action sub-item"
+      >
+        <i class="fas fa-boxes me-2"></i>Inventario
+      </a>
+      <a
+        href="ajuste-inventario.html"
+        class="list-group-item list-group-item-action sub-item"
+        id="menu-ajuste-inventario"
+      >
+        <i class="fas fa-sliders-h me-2"></i>Ajuste de Inventario
+      </a>
+    </div>
+
+    <a
+      href="configuracion.html"
+      id="nav-configuracion"
       class="list-group-item list-group-item-action"
     >
-      <i class="fas fa-user-cog me-2"></i>Gestión de Usuarios
+      <i class="fas fa-cog me-2"></i>Configuración
     </a>
   </div>
 
   <a
     href="#"
-    id="btnCerrarSesion"
+    id="logout-button"
     class="list-group-item list-group-item-action"
   >
     <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión

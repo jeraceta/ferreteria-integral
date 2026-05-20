@@ -125,9 +125,31 @@ document.addEventListener("DOMContentLoaded", () => {
         showCancelButton: true,
         confirmButtonText: "Ver PDF",
         cancelButtonText: 'Cerrar'
-      }).then((action) => {
+      }).then(async (action) => {
         if (action.isConfirmed) {
-            window.open(`${API_PRESUPUESTOS_URL}/reporte/${result.id_presupuesto}`, "_blank");
+          try {
+            // Fase 3: Abrir la ventana emergente ANTES del fetch para evitar el bloqueo del navegador
+            const pdfWindow = window.open("", "_blank");
+            if (!pdfWindow) {
+              Swal.fire("Atención", "El navegador bloqueó la ventana emergente. Por favor, permita ventanas emergentes para este sitio.", "warning");
+            } else {
+              pdfWindow.document.write("<h3>Generando PDF del Presupuesto...</h3>");
+              
+              const pdfResponse = await fetch(
+                `${API_PRESUPUESTOS_URL}/reporte/${result.id_presupuesto}`,
+                { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+              );
+              if (!pdfResponse.ok) throw new Error(`Error ${pdfResponse.status} al generar PDF`);
+              
+              const blob = await pdfResponse.blob();
+              const pdfUrl = URL.createObjectURL(blob);
+              pdfWindow.location.href = pdfUrl;
+              setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
+            }
+          } catch (pdfError) {
+            console.error("Error al abrir PDF del presupuesto:", pdfError);
+            Swal.fire("Error PDF", pdfError.message, "error");
+          }
         }
       });
       
@@ -466,7 +488,9 @@ document.addEventListener("DOMContentLoaded", () => {
         inputBusqueda.value = "";
         listaSugerencias.innerHTML = "";
         listaSugerencias.style.display = "none";
-        inputBusqueda.focus();
+        setTimeout(() => {
+            inputBusqueda.focus();
+        }, 10);
     }
 
   function mostrarSugerencias(productos) {
@@ -508,7 +532,10 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       
       // Permitimos seleccionar incluso sin stock, ya que es un presupuesto
-      item.addEventListener("mousedown", () => seleccionarProducto(producto));
+      item.addEventListener("mousedown", (e) => {
+        e.preventDefault(); // Mantiene el foco en el input
+        seleccionarProducto(producto);
+      });
       
       listaSugerencias.appendChild(item);
     });

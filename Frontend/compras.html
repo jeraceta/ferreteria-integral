@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Registro de Compras - Sistema Ferretería</title>
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <!-- FontAwesome CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <!-- SweetAlert2 CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css"
+    />
+    <!-- Custom CSS -->
+    <script src="theme.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="auth.js"></script>
+  </head>
+  <body>
+    <div id="wrapper">
+      <!-- Sidebar (Cargado dinámicamente) -->
+      <div id="sidebar-container"></div>
+
+      <!-- Page Content -->
+      <div id="page-content-wrapper">
+        <div class="container-fluid content-offset">
+          <main>
+            <h1 class="mt-1 mb-3">Registro de Compras</h1>
+
+            <div class="row g-2">
+              <!-- Columna de Datos del Proveedor -->
+              <div class="col-md-12 col-lg-3 col-xl-3">
+                <div class="card mb-3 bg-warning-subtle border-warning">
+                  <div class="card-header">Datos del Proveedor</div>
+                  <div class="card-body">
+                    <div class="row g-1">
+                      <div class="col-12 mb-2">
+                        <label class="form-label small"
+                          >Identificación Fiscal</label
+                        >
+                        <div class="input-group input-group-sm">
+                          <select
+                            class="form-select"
+                            id="tipoDocProveedor"
+                            style="max-width: 60px"
+                          >
+                            <option value="J">J</option>
+                            <option value="V">V</option>
+                            <option value="E">E</option>
+                            <option value="G">G</option>
+                          </select>
+                          <input
+                            type="text"
+                            class="form-control"
+                            id="numDocProveedor"
+                            placeholder="Número"
+                          />
+                          <button
+                            class="btn btn-outline-secondary btn-sm"
+                            type="button"
+                            id="btnBuscarProveedor"
+                          >
+                            <i class="fas fa-search"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="col-12 mb-2">
+                        <label
+                          for="proveedorRazonSocial"
+                          class="form-label small"
+                          >Razón Social</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control form-control-sm"
+                          id="proveedorRazonSocial"
+                          placeholder="Nombre o Razón Social"
+                          readonly
+                        />
+                      </div>
+                      <div class="col-12 mb-2">
+                        <label for="proveedorDireccion" class="form-label small"
+                          >Dirección Fiscal</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control form-control-sm"
+                          id="proveedorDireccion"
+                          placeholder="Dirección del Proveedor"
+                          readonly
+                        />
+                      </div>
+                      <div class="col-6 mb-2">
+                        <label class="form-label small"
+                          >Representante / Contacto</label
+                        >
+                        <input
+                          type="text"
+                          class="form-control form-control-sm"
+                          id="proveedorContacto"
+                          readonly
+                        />
+                      </div>
+                      <div class="col-6 mb-2">
+                        <label for="proveedorEmail" class="form-label small"
+                          >Email</label
+                        >
+                        <input
+                          type="email"
+                          class="form-control form-control-sm"
+                          id="proveedorEmail"
+                          placeholder="Correo"
+                          readonly
+                        />
+                      </div>
+                    </div>
+                    <div class="d-grid mt-2">
+                      <button
+                        class="btn btn-warning btn-sm"
+                        id="btnNuevoProveedor"
+                      >
+                        <i class="fas fa-plus me-2"></i>Nuevo Proveedor
+                      </button>
+                      <button
+                        class="btn btn-outline-secondary btn-sm mt-2"
+                        id="btnLimpiarProveedor"
+                        type="button"
+                      >
+                        <i class="fas fa-eraser me-2"></i>Limpiar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Columna de Productos y Totales -->
+              <div class="col-md-12 col-lg-9 col-xl-9">
+                <div class="card mb-3">
+                  <div class="card-header">Productos a Comprar</div>
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <label for="buscarProductoInput" class="form-label"
+                        >Buscar Producto</label
+                      >
+                      <div class="input-group">
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="buscarProductoInput"
+                          placeholder="Código o nombre del producto"
+                          autocomplete="off"
+                        />
+                        <button
+                          class="btn btn-outline-primary"
+                          type="button"
+                          id="btnQuickCreateProduct"
+                          title="Crear Nuevo Producto"
+                        >
+                          <i class="fas fa-plus-circle"></i> Nuevo
+                        </button>
+                      </div>
+                      <div
+                        id="listaSugerenciasProductos"
+                        class="predictive-search-results"
+                      ></div>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table table-sm table-hover">
+                        <thead>
+                          <tr>
+                            <th style="width: 10%">Código</th>
+                            <th style="width: 30%">Descripción</th>
+                            <th style="width: 15%">Marca</th>
+                            <th style="width: 15%">Costo Unit. ($)</th>
+                            <th style="width: 10%">Cantidad</th>
+                            <th style="width: 15%">Subtotal ($)</th>
+                            <th style="width: 5%">Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody id="productosCompraBody">
+                          <!-- Productos añadidos aquí -->
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Sección de Totales -->
+                <div class="card mt-3">
+                  <div class="card-body">
+                    <div class="row align-items-center">
+                      <div class="col-lg-4">
+                        <div class="form-check form-switch mb-2">
+                          <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="aplicarIvaSwitch"
+                            checked
+                          />
+                          <label class="form-check-label" for="aplicarIvaSwitch"
+                            >Aplicar IVA (16%)</label
+                          >
+                        </div>
+                        <div class="form-group mt-2">
+                          <label for="nroFacturaProveedor" class="form-label-sm"
+                            >N° Factura Proveedor</label
+                          >
+                          <input
+                            type="text"
+                            id="nroFacturaProveedor"
+                            class="form-control form-control-sm"
+                            placeholder="Ej: 000123"
+                          />
+                        </div>
+                      </div>
+                      <div class="col-lg-8 text-md-end">
+                        <table
+                          class="table table-borderless table-sm text-end mb-0"
+                        >
+                          <tbody>
+                            <tr>
+                              <td class="fs-5">Subtotal:</td>
+                              <td class="fs-5 fw-bold">
+                                <span id="subtotalCompraBS">0.00</span> Bs
+                              </td>
+                              <td class="fs-5 text-muted">
+                                ($<span id="subtotalCompra">0.00</span>)
+                              </td>
+                            </tr>
+                            <tr id="ivaRow">
+                              <td class="fs-5">IVA (16%):</td>
+                              <td class="fs-5 fw-bold">
+                                <span id="ivaCompraBS">0.00</span> Bs
+                              </td>
+                              <td class="fs-5 text-muted">
+                                ($<span id="ivaCompra">0.00</span>)
+                              </td>
+                            </tr>
+                            <tr class="border-top">
+                              <td class="pt-2">
+                                <h4 class="mb-0">TOTAL COMPRA:</h4>
+                              </td>
+                              <td class="pt-2">
+                                <h4 class="mb-0 text-primary fw-bold">
+                                  <span id="totalCompraBS">0.00</span> Bs
+                                </h4>
+                              </td>
+                              <td class="pt-2">
+                                <h4 class="mb-0 text-primary fw-bold">
+                                  ($<span id="totalCompra">0.00</span>)
+                                </h4>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <div class="d-grid mt-3">
+                      <button
+                        type="button"
+                        class="btn btn-success w-100 btn-lg"
+                        onclick="confirmarCompra()"
+                      >
+                        📦 PROCESAR COMPRA (F3)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Totalización ELIMINADO -->
+
+    <!-- Modal Quick Create Producto -->
+    <div
+      class="modal fade"
+      id="modalQuickCreate"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">
+              <i class="fas fa-box-open me-2"></i>Nuevo Producto Rápido
+            </h5>
+            <button
+              type="button"
+              class="btn-close btn-close-white"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form id="formQuickCreate" autocomplete="off">
+              <div class="row mb-2">
+                <div class="col-md-4">
+                  <label class="form-label small">Código</label>
+                  <input
+                    type="text"
+                    class="form-control form-control-sm"
+                    id="qc_codigo"
+                    required
+                  />
+                </div>
+                <div class="col-md-8">
+                  <label class="form-label small">Nombre / Descripción</label>
+                  <input
+                    type="text"
+                    class="form-control form-control-sm"
+                    id="qc_nombre"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-md-6">
+                  <label class="form-label small">Categoría</label>
+                  <select
+                    class="form-select form-select-sm"
+                    id="qc_categoria"
+                    required
+                  >
+                    <option value="">Seleccione...</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small">Marca</label>
+                  <input
+                    type="text"
+                    class="form-control form-control-sm"
+                    id="qc_marca"
+                  />
+                </div>
+              </div>
+              <div class="row mb-3">
+                <div class="col-md-4">
+                  <label class="form-label small">Costo ($)</label>
+                  <input
+                    type="number"
+                    class="form-control form-control-sm"
+                    id="qc_precio_costo"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small">Precio Venta ($)</label>
+                  <input
+                    type="number"
+                    class="form-control form-control-sm"
+                    id="qc_precio_venta"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small">Stock Inicial</label>
+                  <input
+                    type="number"
+                    class="form-control form-control-sm"
+                    id="qc_stock"
+                    value="0"
+                    min="0"
+                    readonly
+                    title="El stock se sumará con la compra actual"
+                  />
+                </div>
+              </div>
+              <div class="d-flex justify-content-end">
+                <button
+                  type="button"
+                  class="btn btn-secondary me-2"
+                  data-bs-dismiss="modal"
+                >
+                  Cancelar
+                </button>
+                <button type="submit" class="btn btn-success">
+                  Guardar e Insertar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Nuevo Proveedor (In-Place) -->
+    <div
+      class="modal fade"
+      id="modalNuevoProveedor"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-warning text-dark">
+            <h5 class="modal-title">
+              <i class="fas fa-truck me-2"></i>Registrar Proveedor
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form id="formNuevoProveedor" autocomplete="off">
+              <div class="row mb-3">
+                <div class="col-md-4">
+                  <label class="form-label small">Identificación Fiscal</label>
+                  <div class="input-group input-group-sm">
+                    <select
+                      class="form-select"
+                      id="np_tipo_documento"
+                      style="max-width: 70px"
+                    >
+                      <option value="J">J</option>
+                      <option value="V">V</option>
+                      <option value="E">E</option>
+                      <option value="G">G</option>
+                    </select>
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="np_numero_documento"
+                      placeholder="Ej: 12345678"
+                      required
+                    />
+                  </div>
+                </div>
+                <div class="col-md-8">
+                  <label class="form-label small">Razón Social</label>
+                  <input
+                    type="text"
+                    class="form-control form-control-sm"
+                    id="np_razon_social"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="row mb-3">
+                <div class="col-md-6">
+                  <label class="form-label small"
+                    >Representante de Ventas</label
+                  >
+                  <input
+                    type="text"
+                    class="form-control form-control-sm"
+                    id="np_representante_ventas"
+                    placeholder="Nombre del vendedor asignado"
+                  />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small">Teléfono</label>
+                  <input
+                    type="tel"
+                    class="form-control form-control-sm"
+                    id="np_telefono"
+                  />
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label small">Email</label>
+                <input
+                  type="email"
+                  class="form-control form-control-sm"
+                  id="np_email"
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label small">Dirección Fiscal</label>
+                <textarea
+                  class="form-control form-control-sm"
+                  id="np_direccion"
+                  rows="2"
+                ></textarea>
+              </div>
+              <div class="d-flex justify-content-end">
+                <button
+                  type="button"
+                  class="btn btn-secondary me-2"
+                  data-bs-dismiss="modal"
+                >
+                  Cancelar
+                </button>
+                <button type="submit" class="btn btn-warning">
+                  Guardar y Seleccionar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SweetAlert2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Custom JS -->
+    <script src="sidebar.js"></script>
+    <script src="compras.js"></script>
+  </body>
+</html>

@@ -1,0 +1,44 @@
+USE ferreteria;
+
+CREATE TABLE IF NOT EXISTS cxc_cuentas (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  cliente_id INT NOT NULL,
+  factura VARCHAR(50) NOT NULL,
+  vencimiento DATE NOT NULL,
+  total DECIMAL(10,2) NOT NULL,
+  abonado DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  estado ENUM('Pendiente', 'Parcial', 'Pagado') NOT NULL DEFAULT 'Pendiente',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS cxp_cuentas (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  proveedor_id INT NOT NULL,
+  factura VARCHAR(50),
+  concepto VARCHAR(255) NOT NULL,
+  vencimiento DATE NOT NULL,
+  total DECIMAL(10,2) NOT NULL,
+  abonado DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  estado ENUM('Pendiente', 'Parcial', 'Pagado') NOT NULL DEFAULT 'Pendiente',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (proveedor_id) REFERENCES proveedores(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS cxc_abonos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  cxc_id INT NOT NULL,
+  monto DECIMAL(10,2) NOT NULL,
+  fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  soporte VARCHAR(255) NOT NULL,
+  FOREIGN KEY (cxc_id) REFERENCES cxc_cuentas(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS cxp_abonos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  cxp_id INT NOT NULL,
+  monto DECIMAL(10,2) NOT NULL,
+  fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  soporte VARCHAR(255) NOT NULL,
+  FOREIGN KEY (cxp_id) REFERENCES cxp_cuentas(id) ON DELETE CASCADE
+);

@@ -19,91 +19,16 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css"
     />
+    <!-- theme.js: aplica el tema guardado antes del primer render (evita FOUC) -->
+    <script src="theme.js"></script>
     <!-- Custom CSS -->
     <link rel="stylesheet" href="styles.css" />
     <script src="auth.js"></script>
   </head>
   <body>
     <div id="wrapper">
-      <!-- Sidebar -->
-      <nav id="sidebar" class="sidebar">
-        <div class="sidebar-heading">
-          <div class="logo-container">
-            <img src="img/logo.png" alt="Logo" />
-          </div>
-        </div>
-        <div class="list-group list-group-flush">
-          <a
-            href="dashboard.html"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-home me-2"></i>Dashboard
-          </a>
-          <a
-            href="inventario.html"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-boxes me-2"></i>Inventario
-          </a>
-          <a
-            href="#ventasSubmenu"
-            data-bs-toggle="collapse"
-            class="list-group-item list-group-item-action ventas-dropdown-toggle"
-          >
-            <i class="fas fa-shopping-cart me-2"></i>Ventas
-            <i class="fas fa-chevron-down float-end"></i>
-          </a>
-          <div class="collapse show" id="ventasSubmenu">
-            <a
-              href="ventas.html"
-              class="list-group-item list-group-item-action sub-item"
-              ><i class="fas fa-cash-register me-2"></i>Facturación</a
-            >
-            <a
-              href="gestion-ventas.html"
-              class="list-group-item list-group-item-action sub-item active"
-              ><i class="fas fa-history me-2"></i>Historial y Devoluciones</a
-            >
-            <a
-              href="caja.html"
-              class="list-group-item list-group-item-action sub-item"
-              ><i class="fas fa-cash-register me-2"></i>Cierre de Caja</a
-            >
-            <a
-              href="presupuestos.html"
-              class="list-group-item list-group-item-action sub-item"
-              ><i class="fas fa-file-alt me-2"></i>Presupuestos</a
-            >
-          </div>
-          <a
-            href="clientes.html"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-users me-2"></i>Clientes
-          </a>
-          <a
-            href="productos.html"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-box me-2"></i>Productos
-          </a>
-          <a
-            href="usuarios.html"
-            id="nav-usuarios"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-user-cog me-2"></i>Gestión de Usuarios
-          </a>
-        </div>
-
-        <a
-          href="#"
-          id="btnCerrarSesion"
-          class="list-group-item list-group-item-action"
-        >
-          <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión
-        </a>
-      </nav>
+      <!-- Sidebar (Cargado dinámicamente) -->
+      <div id="sidebar-container"></div>
 
       <!-- Page Content -->
       <div id="page-content-wrapper">

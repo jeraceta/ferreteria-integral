@@ -2,12 +2,15 @@
 
 // Importa la conexión a la base de datos.
 const db = require("../db");
-// const bcrypt = require('bcryptjs'); // Pendiente: Descomentar cuando se instale bcryptjs
+// Importa bcrypt para el hashing seguro de contraseñas.
+const bcrypt = require("bcrypt");
+
+const SALT_ROUNDS = 10; // Factor de costo para el hashing. 10 es el estándar recomendado.
 
 /**
  * @function listarUsuarios
  * Obtiene y devuelve una lista de todos los usuarios.
- * Corrige la consulta SQL para usar 'username' en lugar de 'usuario'.
+ * Nunca devuelve el campo 'password' por seguridad.
  */
 const listarUsuarios = async (req, res, next) => {
   try {
@@ -22,12 +25,11 @@ const listarUsuarios = async (req, res, next) => {
 
 /**
  * @function crearUsuario
- * Crea un nuevo usuario en la base de datos.
+ * Crea un nuevo usuario en la base de datos con la contraseña encriptada con bcrypt.
  * Valida que el rol sea uno de los permitidos ('Vendedor', 'Administrador').
  */
 const crearUsuario = async (req, res, next) => {
   try {
-    // Desestructura los datos del cuerpo de la petición.
     const { nombre, username, password, rol } = req.body;
 
     // Validación de campos obligatorios.
@@ -38,24 +40,21 @@ const crearUsuario = async (req, res, next) => {
     }
 
     // Validación del rol permitido por la base de datos (ENUM).
-    // Usamos los roles capitalizados como se definió en migraciones anteriores.
     if (!["Vendedor", "Administrador"].includes(rol)) {
-      return res
-        .status(400)
-        .json({
-          message: "Rol no válido. Debe ser 'Vendedor' o 'Administrador'.",
-        });
+      return res.status(400).json({
+        message: "Rol no válido. Debe ser 'Vendedor' o 'Administrador'.",
+      });
     }
 
-    // TODO: Implementar encriptación con bcrypt cuando esté configurado
-    const hashedPassword = password;
+    // Encriptar la contraseña antes de guardarla en la base de datos.
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
     const [result] = await db.query(
       "INSERT INTO usuarios (nombre, username, password, rol) VALUES (?, ?, ?, ?)",
       [nombre, username, hashedPassword, rol],
     );
 
-    // Respuesta exitosa con los datos del usuario creado.
+    // Respuesta exitosa sin devolver datos sensibles.
     res.status(201).json({ id: result.insertId, nombre, username, rol });
   } catch (error) {
     // Manejo de error para nombres de usuario duplicados.
@@ -64,7 +63,6 @@ const crearUsuario = async (req, res, next) => {
         .status(409)
         .json({ message: "El nombre de usuario ya existe." });
     }
-    // Para otros errores, se pasa al siguiente middleware.
     next(error);
   }
 };
@@ -72,6 +70,7 @@ const crearUsuario = async (req, res, next) => {
 /**
  * @function actualizarUsuario
  * Actualiza los datos de un usuario existente.
+ * Si se proporciona una nueva contraseña, se encripta antes de guardarla.
  */
 const actualizarUsuario = async (req, res, next) => {
   try {
@@ -80,12 +79,11 @@ const actualizarUsuario = async (req, res, next) => {
 
     // Encriptación de contraseña si se proporciona una nueva.
     let hashedPassword = null;
-    if (password) {
-      // hashedPassword = bcrypt.hashSync(password, 10); // TODO: Implementar.
-      hashedPassword = password; // Solución temporal.
+    if (password && password.trim() !== "") {
+      hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     }
 
-    // Construcción dinámica de la consulta SQL.
+    // Construcción dinámica de la consulta SQL para actualizar solo los campos enviados.
     let query = "UPDATE usuarios SET ";
     const params = [];
 
@@ -98,13 +96,10 @@ const actualizarUsuario = async (req, res, next) => {
       params.push(username);
     }
     if (rol) {
-      // Validación del rol.
       if (!["Vendedor", "Administrador"].includes(rol)) {
-        return res
-          .status(400)
-          .json({
-            message: "Rol no válido. Debe ser 'Vendedor' o 'Administrador'.",
-          });
+        return res.status(400).json({
+          message: "Rol no válido. Debe ser 'Vendedor' o 'Administrador'.",
+        });
       }
       query += "rol = ?, ";
       params.push(rol);
@@ -121,17 +116,14 @@ const actualizarUsuario = async (req, res, next) => {
         .json({ message: "No se proporcionaron datos para actualizar." });
     }
 
-    // Finaliza la consulta.
-    query = query.slice(0, -2); // Elimina la última coma.
+    // Elimina la última coma y espacio, y añade la condición WHERE.
+    query = query.slice(0, -2);
     query += " WHERE id = ?";
     params.push(id);
 
-    // Ejecuta la actualización.
     await db.query(query, params);
-
     res.json({ message: "Usuario actualizado correctamente" });
   } catch (error) {
-    // Manejo de error para nombres de usuario duplicados.
     if (error.code === "ER_DUP_ENTRY") {
       return res
         .status(409)

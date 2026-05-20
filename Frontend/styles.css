@@ -1,575 +1,843 @@
-/* styles.css */
+/* ==========================================================================
+   styles.css — Sistema de Diseño Global
+   Ferretería | Frontend
+   --------------------------------------------------------------------------
+   ARQUITECTURA:
+   1. Design Tokens (Custom Properties) — :root (light) + [data-theme="dark"]
+   2. Reset y Base
+   3. Layout Estructural (#wrapper, sidebar, topbar, content)
+   4. Componentes Bootstrap Override (cards, forms, tables, buttons)
+   5. Módulo: Búsqueda Predictiva (sugerencias)
+   6. Módulo: Ventas (layout 50/50, resumen, tabla)
+   7. Módulo: Login
+   8. Sidebar submenú y logout
+   9. Responsive (max-width: 768px)
+   ========================================================================== */
+
+/* ==========================================================================
+   1. DESIGN TOKENS — LIGHT MODE (default)
+   --------------------------------------------------------------------------
+   Paleta "Clean Corporate": fondos blancos/grises muy claros, acento azul.
+   Todas las variables son consumidas por los componentes más abajo.
+   ========================================================================== */
+:root {
+  /* — Fondos — */
+  --bg-app:          #f0f4f8;   /* Fondo general de la aplicación */
+  --bg-surface:      #ffffff;   /* Tarjetas, modales, contenedores */
+  --bg-surface-alt:  #f8f9fa;   /* Superficie secundaria (filas alternas, summaries) */
+  --bg-surface-hover:#e9ecef;   /* Estado hover en superficies */
+  --bg-input:        #ffffff;   /* Fondo de inputs */
+
+  /* — Textos — */
+  --text-primary:    #1a202c;   /* Texto principal */
+  --text-secondary:  #4a5568;   /* Texto secundario / muted */
+  --text-muted:      #718096;   /* Texto de menor jerarquía */
+  --text-inverted:   #ffffff;   /* Texto sobre fondos oscuros */
+  --text-label:      #555555;   /* Labels de formulario */
+
+  /* — Bordes — */
+  --border-color:    #dee2e6;   /* Bordes estándar */
+  --border-strong:   #adb5bd;   /* Bordes más visibles */
+  --border-radius:   6px;       /* Radio de borde predeterminado */
+
+  /* — Acento corporativo — */
+  --accent-primary:       #0d5ca8;  /* Azul corporativo principal */
+  --accent-primary-dark:  #094b8a;  /* Hover del azul */
+  --accent-primary-light: #d0e6ff;  /* Fondo sutil azul (badges, highlights) */
+  --accent-success:       #198754;
+  --accent-danger:        #dc3545;
+  --accent-warning:       #f59e0b;
+
+  /* — Sidebar — */
+  --sidebar-bg-start:    #1e3a5f;  /* Inicio del gradiente */
+  --sidebar-bg-end:      #2d5282;  /* Fin del gradiente */
+  --sidebar-text:        #cbd5e0;  /* Texto de ítems del sidebar */
+  --sidebar-text-active: #ffffff;
+  --sidebar-item-hover:  rgba(255, 255, 255, 0.10);
+  --sidebar-item-active: rgba(255, 255, 255, 0.18);
+  --sidebar-border:      rgba(255, 255, 255, 0.12);
+  --sidebar-logo-bg:     #ffffff;
+
+  /* — Topbar / Navbar — */
+  --topbar-bg:       #0d5ca8;
+  --topbar-text:     #ffffff;
+  --topbar-text-hover: #c0dffb;
+
+  /* — Sombras — */
+  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.07);
+  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.09);
+  --shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.12);
+
+  /* — Transición global — */
+  --transition-base: 0.25s ease;
+}
+
+/* ==========================================================================
+   1b. DESIGN TOKENS — DARK MODE
+   --------------------------------------------------------------------------
+   Paleta "Slate": grises azulados oscuros. Evita negro puro (#000) para
+   reducir la fatiga visual. Se activa con data-theme="dark" en <body>.
+   ========================================================================== */
+[data-theme="dark"] {
+  /* — Fondos — */
+  --bg-app:          #0f172a;   /* Fondo general — Slate 900 */
+  --bg-surface:      #1e293b;   /* Tarjetas — Slate 800 */
+  --bg-surface-alt:  #273549;   /* Superficie secundaria — Slate 750 */
+  --bg-surface-hover:#2d3f58;   /* Hover — Slate 700 */
+  --bg-input:        #1e293b;   /* Fondo de inputs */
+
+  /* — Textos — */
+  --text-primary:    #e2e8f0;   /* Texto principal — Slate 200 */
+  --text-secondary:  #94a3b8;   /* Texto secundario — Slate 400 */
+  --text-muted:      #64748b;   /* Texto muted — Slate 500 */
+  --text-inverted:   #0f172a;   /* Texto sobre fondos claros */
+  --text-label:      #94a3b8;
+
+  /* — Bordes — */
+  --border-color:    #334155;   /* Bordes — Slate 700 */
+  --border-strong:   #475569;   /* Bordes visibles — Slate 600 */
+
+  /* — Acento — (se mantiene el azul pero ligeramente más brillante) */
+  --accent-primary:       #3b82f6;  /* Blue 500 — más visible sobre oscuro */
+  --accent-primary-dark:  #2563eb;
+  --accent-primary-light: #1e3a6e;
+
+  /* — Sidebar — */
+  --sidebar-bg-start:    #0f172a;
+  --sidebar-bg-end:      #1e293b;
+  --sidebar-text:        #94a3b8;
+  --sidebar-text-active: #e2e8f0;
+  --sidebar-item-hover:  rgba(255, 255, 255, 0.07);
+  --sidebar-item-active: rgba(59, 130, 246, 0.25);
+  --sidebar-border:      rgba(255, 255, 255, 0.08);
+  --sidebar-logo-bg:     #1e293b;
+
+  /* — Topbar — */
+  --topbar-bg:       #1e293b;
+  --topbar-text:     #e2e8f0;
+  --topbar-text-hover: #93c5fd;
+
+  /* — Sombras — */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+/* ==========================================================================
+   2. RESET Y BASE
+   ========================================================================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 body {
-    overflow-x: hidden; /* Prevent horizontal scrollbar */
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f8f9fa; /* Light background for consistency */
+  overflow-x: hidden;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base);
+  -webkit-font-smoothing: antialiased;
 }
 
-#wrapper {
-    display: flex;
-    min-height: 100vh;
-}
-
-/* Custom Navbar styles */
-.custom-navbar {
-    height: 56px; /* Moderate height */
-    background-color: #004085 !important; /* Corporate blue */
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.custom-navbar .navbar-brand,
-.custom-navbar .nav-link {
-    color: white !important;
-}
-
-.custom-navbar .nav-link:hover {
-    color: #c0dffb !important;
-}
-
-/* Custom Sidebar styles */
-.sidebar {
-    min-width: 180px;
-    max-width: 180px;
-    background: #212529; /* Dark grey */
-    color: #fff;
-    transition: margin .25s ease-out;
-    box-shadow: 2px 0px 5px rgba(0,0,0,0.1);
-    position: fixed; /* Make sidebar fixed */
-    height: 100vh;
-    z-index: 100; /* Ensure it's above content */
-    top: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-.sidebar .logo-container {
-    text-align: center;
-    padding: 10px 0; /* Add some padding around the logo */
-    border-bottom: 1px solid #495057; /* Separator for the logo area */
-}
-
-.sidebar .logo-container img {
-    max-height: 80px;
-    max-width: 100%;
-    object-fit: contain;
-    display: block; /* Ensure it behaves like a block element for sizing */
-    margin: 0 auto; /* Center the image */
-}
-
-.sidebar .sidebar-heading {
-    padding: 1rem;
-    font-size: 1.2rem;
-    color: #f8f9fa;
-    font-weight: bold;
-    text-align: center;
-    border-bottom: 1px solid #495057;
-    height: auto; /* Allow height to adjust based on content */
-    box-sizing: border-box; /* Include padding and border in the element's total width and height */
-}
-
-.sidebar .list-group {
-    width: 100%;
-    flex-grow: 1; /* Allow the list of links to grow and push subsequent items down */
-}
-
-.sidebar .list-group-item {
-    padding: 10px 15px;
-    font-size: 1.1em;
-    color: #adb5bd; /* Light grey for text */
-    background-color: #212529; /* Match sidebar background */
-    border: none; /* Remove default list-group-item border */
-}
-
-.sidebar .list-group-item:hover,
-.sidebar .list-group-item.active {
-    color: #f8f9fa;
-    background: #343a40; /* Slightly lighter dark grey on hover/active */
-    text-decoration: none;
-}
-
-/* Content area styles */
-#page-content-wrapper {
-    width: calc(100% - 180px); /* Ocupa el espacio restante */
-    margin-left: 180px; /* Offset for the fixed sidebar */
-    transition: margin .25s ease-out;
-}
-
-.content-offset {
-    padding-top: 56px; /* Offset for fixed navbar */
-    flex-grow: 1;
-    padding: 10px;
-}
-
-/* Toggled sidebar state (mobile/collapsed) */
-#wrapper.toggled .sidebar {
-    margin-left: -180px;
-}
-
-#wrapper.toggled #page-content-wrapper {
-    margin-left: 0; /* Full width when sidebar is toggled */
-}
-
-/* Hamburger menu button */
-#menu-toggle {
-    color: #fff;
-    background-color: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    margin-right: 15px; /* Space between toggle and brand */
-}
-
-#menu-toggle:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-h2 { font-size: 1rem; margin-bottom: 5px; } /* Adjusted heading sizes for compactness */
+h2 { font-size: 1rem;   margin-bottom: 5px; }
 h4 { font-size: 0.9rem; margin-bottom: 3px; }
 h5 { font-size: 0.8rem; margin-bottom: 2px; }
 h6 { font-size: 0.75rem; margin-bottom: 1px; }
 
-/* Specific adjustments for cards and form elements */
+/* ==========================================================================
+   3. LAYOUT ESTRUCTURAL
+   ========================================================================== */
+#wrapper {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ---- Sidebar ---- */
+.sidebar {
+  min-width: 185px;
+  max-width: 185px;
+  background: linear-gradient(160deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%);
+  color: var(--sidebar-text);
+  transition: margin var(--transition-base);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.20);
+  position: fixed;
+  height: 100vh;
+  z-index: 100;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-border) transparent;
+}
+
+/* Logo del sidebar */
+.sidebar .logo-container {
+  text-align: center;
+  background-color: var(--sidebar-logo-bg);
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 10px;
+  border-bottom: 1px solid var(--sidebar-border);
+  transition: background-color var(--transition-base);
+}
+
+.sidebar .logo-container img {
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.sidebar .sidebar-heading {
+  padding: 1rem;
+  font-size: 1.1rem;
+  color: var(--sidebar-text-active);
+  font-weight: 700;
+  text-align: center;
+  border-bottom: 1px solid var(--sidebar-border);
+  letter-spacing: 0.02em;
+}
+
+.sidebar .list-group {
+  width: 100%;
+  flex-grow: 1;
+}
+
+/* Ítems de navegación del sidebar */
+.sidebar .list-group-item {
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  color: var(--sidebar-text);
+  background-color: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base),
+    border-left-color var(--transition-base);
+}
+
+.sidebar .list-group-item:hover {
+  color: var(--sidebar-text-active);
+  background-color: var(--sidebar-item-hover);
+  text-decoration: none;
+}
+
+.sidebar .list-group-item.active,
+.sidebar .list-group-item.active-parent {
+  color: var(--sidebar-text-active);
+  background-color: var(--sidebar-item-active);
+  border-left-color: var(--accent-primary);
+}
+
+/* Subítems de menú desplegable */
+.sidebar .sub-item {
+  padding-left: 2.5rem;
+  font-size: 0.85rem;
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+.sidebar .sub-item:hover {
+  background-color: var(--sidebar-item-hover);
+}
+
+.sidebar .sub-item.active {
+  background-color: var(--sidebar-item-active);
+  color: var(--sidebar-text-active);
+  border-left-color: var(--accent-primary);
+}
+
+/* Chevron animado en dropdown */
+.ventas-dropdown-toggle .fa-chevron-down {
+  transition: transform 0.3s ease;
+}
+
+.ventas-dropdown-toggle[aria-expanded="true"] .fa-chevron-down {
+  transform: rotate(180deg);
+}
+
+/* Botón de logout */
+#logout-button {
+  margin-top: auto;
+  border-top: 1px solid var(--sidebar-border);
+  color: var(--sidebar-text) !important;
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base);
+}
+
+#logout-button:hover {
+  background-color: rgba(220, 53, 69, 0.75) !important;
+  color: var(--text-inverted) !important;
+}
+
+/* ---- Topbar / Navbar ---- */
+.custom-navbar {
+  height: 56px;
+  background-color: var(--topbar-bg) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: background-color var(--transition-base);
+}
+
+.custom-navbar .navbar-brand,
+.custom-navbar .nav-link {
+  color: var(--topbar-text) !important;
+}
+
+.custom-navbar .nav-link:hover {
+  color: var(--topbar-text-hover) !important;
+}
+
+#menu-toggle {
+  color: var(--topbar-text);
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.40);
+  margin-right: 15px;
+  transition: background-color var(--transition-base);
+}
+
+#menu-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* ---- Área de contenido ---- */
+#page-content-wrapper {
+  width: calc(100% - 185px);
+  margin-left: 185px;
+  transition: margin var(--transition-base);
+}
+
+.content-offset {
+  padding-top: 56px;
+  flex-grow: 1;
+  padding: 10px;
+}
+
+/* Toggled sidebar (colapsado) */
+#wrapper.toggled .sidebar {
+  margin-left: -185px;
+}
+
+#wrapper.toggled #page-content-wrapper {
+  margin-left: 0;
+}
+
+/* ==========================================================================
+   4. COMPONENTES BOOTSTRAP OVERRIDE
+   Todos consumen las variables del design token, garantizando coherencia
+   en Light y Dark mode sin sobrescrituras manuales de colores.
+   ========================================================================== */
+
+/* ---- Cards ---- */
 .card {
-    margin-bottom: 5px; /* Reduced margin-bottom */
-    border-radius: 4px; /* Slightly smaller border radius */
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Lighter shadow */
+  background-color: var(--bg-surface);
+  border-color: var(--border-color);
+  margin-bottom: 5px;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-sm);
+  transition:
+    background-color var(--transition-base),
+    border-color var(--transition-base);
 }
 
 .card-header {
-    background-color: #007bff;
-    color: white;
-    font-weight: bold;
-    padding: 3px 5px; /* Further reduced padding */
-    font-size: 0.9rem; /* Further reduced font size */
-    border-radius: 3px 3px 0 0;
+  background-color: var(--accent-primary);
+  color: var(--text-inverted);
+  font-weight: 700;
+  padding: 4px 8px;
+  font-size: 0.88rem;
+  border-radius: calc(var(--border-radius) - 1px) calc(var(--border-radius) - 1px) 0 0;
+  border-bottom: none;
+}
+
+/* Card-header neutro (blanco/superficie) para dashboard */
+.card-header.bg-white {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
 }
 
 .card-body {
-    padding: 5px; /* Reduced padding */
+  padding: 6px;
+  color: var(--text-primary);
+}
+
+/* ---- Tablas ---- */
+.table {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.table-light,
+thead.table-light th {
+  background-color: var(--bg-surface-alt) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.table thead th {
+  background-color: var(--bg-surface-alt);
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.table tbody tr {
+  background-color: var(--bg-surface);
+  border-color: var(--border-color);
+  transition: background-color 0.15s ease;
+}
+
+.table-hover tbody tr:hover {
+  background-color: var(--bg-surface-hover) !important;
+  color: var(--text-primary);
+}
+
+.table-responsive .table td,
+.table-responsive .table th {
+  padding: 0.4rem;
+}
+
+/* ---- Formularios ---- */
+.form-control,
+.form-select {
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.82rem;
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base),
+    border-color var(--transition-base);
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 0.2rem var(--accent-primary-light);
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
+.form-control-sm {
+  font-size: 0.82rem;
+  padding: 0.25rem 0.5rem;
 }
 
 .form-group {
-    margin-bottom: 0.2rem; /* Further reduced space between form elements */
+  margin-bottom: 0.2rem;
 }
 
-.form-control {
-    padding: 0.25rem 0.5rem; /* Smaller padding */
-    font-size: 0.8rem; /* Slightly smaller font for inputs */
+label.small {
+  font-weight: 600;
+  color: var(--text-label);
+  text-transform: uppercase;
+  font-size: 0.7rem;
 }
 
+/* ---- Botones ---- */
 .btn {
-    padding: 0.25rem 0.5rem; /* Smaller button padding */
-    font-size: 0.8rem; /* Smaller button font size */
+  padding: 0.25rem 0.5rem;
+  font-size: 0.82rem;
+  transition:
+    background-color var(--transition-base),
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
 }
 
-/* AÑADIDO: Estilos para el formulario de dos columnas */
-.form-row-compact {
-    display: flex;
-    gap: 1rem; /* Espacio entre las columnas */
-}
-.form-row-compact > .form-group {
-    flex: 1; /* Cada grupo de formulario ocupa el mismo espacio */
+.btn-primary {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--text-inverted);
 }
 
+.btn-primary:hover,
+.btn-primary:focus {
+  background-color: var(--accent-primary-dark);
+  border-color: var(--accent-primary-dark);
+}
 
-/* Predictive Search Results - Refined for Alignment */
+/* ---- Badges & Textos de estado ---- */
+.text-muted {
+  color: var(--text-muted) !important;
+}
+
+/* ==========================================================================
+   5. MÓDULO: BÚSQUEDA PREDICTIVA (SUGERENCIAS)
+   ========================================================================== */
 #listaSugerenciasProductos {
-    position: absolute;
-    width: calc(100% - 1rem);
-    z-index: 10000;
-    background: #fff;
-    border: 1px solid #ced4da;
-    border-top: none;
-    max-height: 300px;
-    overflow-y: auto;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  position: absolute;
+  width: calc(100% - 1rem);
+  z-index: 10000;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-top: none;
+  max-height: 300px;
+  overflow-y: auto;
+  box-shadow: var(--shadow-md);
 }
 
 .sugerencia-item {
-    display: flex;
-    justify-content: space-between; /* Alineación de extremos */
-    align-items: center;
-    padding: 0.6rem 0.8rem;
-    cursor: pointer;
-    border-bottom: 1px solid #f0f0f0;
-    gap: 1rem; /* Espacio entre bloque izquierdo y derecho */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.8rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+  gap: 1rem;
+  color: var(--text-primary);
+  transition: background-color 0.15s ease;
 }
 
-.sugerencia-item:last-child {
-    border-bottom: none;
-}
+.sugerencia-item:last-child { border-bottom: none; }
 
 .sugerencia-item:hover {
-    background-color: #f1f5f9;
+  background-color: var(--bg-surface-hover);
 }
 
 .sugerencia-item.disabled-suggestion {
-    color: #adb5bd;
-    cursor: not-allowed;
+  color: var(--text-muted);
+  cursor: not-allowed;
 }
 
 .sugerencia-bloque-izquierdo,
 .sugerencia-bloque-derecho {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem; /* Espacio interno en cada bloque */
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.sugerencia-bloque-izquierdo {
-    min-width: 0; /* Permite que el bloque se encoja si es necesario */
-}
-.sugerencia-bloque-derecho {
-    flex-shrink: 0; /* Evita que el bloque derecho se encoja */
-}
-
+.sugerencia-bloque-izquierdo { min-width: 0; }
+.sugerencia-bloque-derecho   { flex-shrink: 0; }
 
 .sugerencia-codigo {
-    font-weight: bold;
-    color: #0056b3;
+  font-weight: 700;
+  color: var(--accent-primary);
 }
 
 .sugerencia-nombre {
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
 }
 
 .sugerencia-separador {
-    color: #ced4da;
-    font-size: 0.8em;
+  color: var(--border-strong);
+  font-size: 0.8em;
 }
 
 .sugerencia-marca {
-    color: #6c757d;
-    font-size: 0.9em;
-    font-style: italic;
-    white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 0.9em;
+  font-style: italic;
+  white-space: nowrap;
 }
 
 .sugerencia-precio {
-    font-weight: bold;
-    color: #198754;
-    white-space: nowrap;
+  font-weight: 700;
+  color: var(--accent-success);
+  white-space: nowrap;
 }
 
 .sugerencia-stock {
-    font-size: 0.9em;
-    color: #495057;
-    background-color: #e9ecef;
-    padding: 3px 7px;
-    border-radius: 4px;
-    white-space: nowrap;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  background-color: var(--bg-surface-alt);
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
+/* ==========================================================================
+   6. MÓDULO: VENTAS
+   ========================================================================== */
 
+/* Layout 50/50 en pantallas grandes */
+@media (min-width: 769px) {
+  #page-content {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 134px);
+    padding-top: 0;
+    padding-bottom: 0;
+  }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .sidebar {
-        margin-left: -180px;
-        position: fixed; /* Keep fixed on mobile */
-    }
+  .sales-layout-50-50 {
+    flex-grow: 1;
+    display: flex;
+    height: 100%;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
 
-    #page-content-wrapper {
-        margin-left: 0; /* No offset when sidebar is hidden */
-    }
+  .sales-layout-50-50 > .col-md-6 {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
 
-    #wrapper.toggled .sidebar {
-        margin-left: 0;
-    }
+  .sales-layout-50-50 .card {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 5px;
+  }
 
-    #wrapper.toggled #page-content-wrapper {
-        margin-left: 180px; /* Offset for open sidebar */
-    }
+  .sales-layout-50-50 .card.card-productos-venta {
+    flex-grow: 1;
+  }
 
-    .navbar-toggler {
-        display: block; /* Ensure toggler is visible on mobile */
-    }
+  .sales-layout-50-50 .card-body {
+    flex-grow: 1;
+    overflow-y: auto;
+  }
 
-    #menu-toggle {
-        order: -1; /* Place toggle button first on mobile */
-    }
-    
-    /* AÑADIDO: Forzar el apilamiento de las columnas del formulario en móvil */
-    .form-row-compact {
-        flex-direction: column;
-        gap: 0.2rem;
-    }
-
-
-    /* Sales module columns stack on mobile */
-    .sales-columns {
-        flex-direction: column;
-    }
-    .sales-columns .col-md-4,
-    .sales-columns .col-md-8 {
-        max-width: 100%;
-        flex: 0 0 100%;
-    }
+  .sales-layout-50-50 .col-md-6:first-child .card:first-child {
+    flex-grow: 0;
+  }
 }
 
-/* Styles from productos.html for client mode */
-body.modo-cliente-activo .columna-acciones,
-body.modo-cliente-activo #btnNuevoProducto {
-    display: none;
-}
-
-/* 50/50 Layout for Sales Module on larger screens */
-@media (min-width: 769px) { /* Apply only for desktop screens */
-    #page-content {
-        display: flex;
-        flex-direction: column;
-        /* Calculate height to fill viewport, subtracting fixed header/navbar/tab height */
-        /* Approximate 56px for navbar, 36px for h2, 42px for nav-tabs */
-        height: calc(100vh - 134px);
-        padding-top: 0; /* Remove top padding to use full height */
-        padding-bottom: 0; /* Remove top padding to use full height */
-    }
-
-    .sales-layout-50-50 {
-        flex-grow: 1; /* Make the row take all available vertical space */
-        display: flex;
-        height: 100%; /* Ensure columns can inherit this height */
-        margin-top: 0; /* Remove default row margin-top */
-        margin-bottom: 0; /* Remove default row margin-bottom */
-    }
-
-    /* MODIFICADO: La columna de la derecha ahora es un flex container */
-    .sales-layout-50-50 > .col-md-6 {
-        display: flex;
-        flex-direction: column;
-        height: 100%; /* Ensure columns fill the height of their parent */
-        padding-top: 0;
-        padding-bottom: 0;
-    }
-    
-    .sales-layout-50-50 .card {
-        display: flex;
-        flex-direction: column;
-        margin-bottom: 5px; /* Keep consistent with existing card margin */
-    }
-    
-    .sales-layout-50-50 .card.card-productos-venta {
-         flex-grow: 1; /* El card de productos crece */
-    }
-
-
-    .sales-layout-50-50 .card-body {
-        flex-grow: 1; /* Allow card-body to grow and fill space */
-        overflow-y: auto; /* Enable vertical scrolling within card-body if content overflows */
-        /* Adjust padding if needed, already set to 5px globally */
-    }
-
-    /* Specific adjustments for the product search card to prevent it from growing too much */
-    .sales-layout-50-50 .col-md-6:first-child .card:first-child {
-        flex-grow: 0; /* Prevent the client data card from growing */
-    }
-}
-
-/* MODIFICADO: Estilos para el nuevo resumen de ventas */
+/* Resumen de totales de venta */
 .sales-summary-box {
-    flex-shrink: 0; /* Previene que el contenedor se encoja */
-    padding: 8px;
-    background-color: #e9ecef; /* Un fondo ligeramente diferente */
-    border-top: 1px solid #dee2e6;
-    text-align: right; /* Align text to the right */
-    font-weight: bold; /* Texto en negrita como se pidió */
+  flex-shrink: 0;
+  padding: 8px;
+  background-color: var(--bg-surface-alt);
+  border-top: 1px solid var(--border-color);
+  text-align: right;
+  font-weight: 700;
+  transition: background-color var(--transition-base);
 }
 
 .sales-summary-box p {
-    margin-bottom: 2px;
-    font-size: 0.9rem;
+  margin-bottom: 2px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
 }
 
 .sales-summary-box p.total-final strong {
-    font-size: 1.1rem; /* Total final más grande */
-    color: #007bff;
+  font-size: 1.1rem;
+  color: var(--accent-primary);
 }
 
 .sales-summary-box .text-muted {
-    font-weight: normal; /* No negrita para la tasa BCV */
+  font-weight: normal;
 }
 
 .sales-summary-box button {
-    margin-top: 5px;
-}
-/* Estilo Compacto para Facturación */
-.form-control-sm {
-    font-size: 0.85rem;
-    padding: 0.25rem 0.5rem;
+  margin-top: 5px;
 }
 
-label.small {
-    font-weight: 600;
-    color: #555;
-    text-transform: uppercase;
-    font-size: 0.7rem;
-}
-
-/* Tabla con Scroll para no colapsar la pantalla */
-.tabla-productos-wrapper {
-    max-height: 40vh; /* Máximo 40% de la altura de la pantalla */
-    overflow-y: auto;
-    border: 1px solid #dee2e6;
-    border-radius: 5px;
-}
-
-/* Banner de Cliente Activo más delgado */
-#banner-cliente-activo .alert {
-    padding: 0.5rem 1rem;
-    margin-bottom: 5px;
-    font-size: 0.9rem;
-}
-
-/* Resalte del monto total */
+/* Monto total principal en Bolívares */
 #totalBs {
-    font-size: 2rem; /* Tamaño de fuente grande */
-    font-weight: bold; /* Negrita */
-    color: #0056b3; /* Azul corporativo oscuro */
-    font-family: 'Segoe UI', Roboto, sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  font-family: "Segoe UI", system-ui, sans-serif;
 }
 
-/* Reducir padding de la tabla de productos */
-.table-responsive .table td,
-.table-responsive .table th {
-    padding: 0.4rem; /* Reducir el padding */
+/* Banner de cliente activo */
+#banner-cliente-activo .alert {
+  padding: 0.5rem 1rem;
+  margin-bottom: 5px;
+  font-size: 0.9rem;
 }
 
-/* === Estilos para el Submenú de Ventas === */
-.sidebar .sub-item {
-    padding-left: 2.5rem; /* Indentación para sub-opciones */
-    background-color: #1a1d20; /* Un poco más oscuro para diferenciar */
+/* Wrapper con scroll para tabla de productos */
+.tabla-productos-wrapper {
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
 }
 
-.sidebar .sub-item:hover {
-    background-color: #343a40; /* Mismo hover que los ítems principales */
+/* Layout de dos columnas en formularios */
+.form-row-compact {
+  display: flex;
+  gap: 1rem;
 }
 
-.sidebar .sub-item.active {
-    background-color: #0d6efd; /* Color primario de Bootstrap para el activo */
-    color: #fff;
+.form-row-compact > .form-group {
+  flex: 1;
 }
 
-.ventas-dropdown-toggle .fa-chevron-down {
-    transition: transform 0.3s ease;
-}
-
-.ventas-dropdown-toggle[aria-expanded="true"] .fa-chevron-down {
-    transform: rotate(180deg);
-}
-
-.sidebar .list-group-item.active-parent {
-    color: #f8f9fa;
-    background: #343a40;
-}
-
-#logout-button {
-    margin-top: auto; /* Push to the bottom */
-    border-top: 1px solid #495057;
-}
-
-#logout-button:hover {
-    background-color: #d83a3a; /* Soft red for distinction */
-    color: white;
-}
-
-/* === Estilos para la Página de Login === */
-
+/* ==========================================================================
+   7. MÓDULO: LOGIN
+   ========================================================================== */
 .login-body {
-    background-color: #f0f2f5; /* Un gris muy claro y limpio */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    margin: 0;
+  background-color: var(--bg-app);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
 }
 
 .login-container {
-    text-align: center;
+  text-align: center;
 }
 
 .login-card {
-    background: #ffffff;
-    padding: 2.5rem 3rem;
-    border-radius: 10px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-    width: 100%;
-    max-width: 400px;
-    display: inline-block;
+  background: var(--bg-surface);
+  padding: 2.5rem 3rem;
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 400px;
+  display: inline-block;
+  border: 1px solid var(--border-color);
 }
 
 .login-logo {
-    max-width: 150px;
-    margin-bottom: 1.5rem;
+  max-width: 150px;
+  margin-bottom: 1.5rem;
 }
 
 .login-card h2 {
-    font-size: 1.8rem;
-    color: #333;
-    margin-bottom: 2rem;
+  font-size: 1.8rem;
+  color: var(--text-primary);
+  margin-bottom: 2rem;
 }
 
+/* Grupo de input con icono */
 .input-group {
-    position: relative;
-    margin-bottom: 1.5rem;
+  position: relative;
+  margin-bottom: 1.5rem;
 }
 
 .input-group i {
-    position: absolute;
-    left: 15px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #adb5bd;
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  z-index: 2;
 }
 
 .input-group input {
-    width: 100%;
-    padding: 0.8rem 1rem 0.8rem 2.5rem; /* Padding para dejar espacio al icono */
-    border: 1px solid #ced4da;
-    border-radius: 5px;
-    font-size: 1rem;
-    transition: border-color 0.2s;
+  width: 100%;
+  padding: 0.8rem 1rem 0.8rem 2.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 1rem;
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    background-color var(--transition-base);
 }
 
 .input-group input:focus {
-    outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-light);
 }
 
 .btn-login {
-    width: 100%;
-    padding: 0.8rem;
-    font-size: 1.1rem;
-    font-weight: bold;
-    color: #fff;
-    background-color: #007bff; /* Azul corporativo */
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
+  width: 100%;
+  padding: 0.8rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-inverted);
+  background-color: var(--accent-primary);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color var(--transition-base);
 }
 
 .btn-login:hover {
-    background-color: #0056b3; /* Un azul más oscuro al pasar el mouse */
+  background-color: var(--accent-primary-dark);
 }
 
 .error-message {
-    color: #dc3545;
-    margin-top: 1rem;
-    height: 20px;
-    font-size: 0.9rem;
+  color: var(--accent-danger);
+  margin-top: 1rem;
+  height: 20px;
+  font-size: 0.9rem;
 }
 
 .forgot-password-link {
-    display: block;
-    margin-top: 1rem;
-    font-size: 0.9rem;
-    color: #6c757d;
-    text-decoration: none;
-    transition: color 0.2s;
+  display: block;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--transition-base);
 }
 
 .forgot-password-link:hover {
-    color: #007bff;
+  color: var(--accent-primary);
+}
+
+/* ==========================================================================
+   8. MODO CLIENTE ACTIVO (Productos)
+   ========================================================================== */
+body.modo-cliente-activo .columna-acciones,
+body.modo-cliente-activo #btnNuevoProducto {
+  display: none;
+}
+
+/* ==========================================================================
+   9. RESPONSIVE (max-width: 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .sidebar {
+    margin-left: -185px;
+    position: fixed;
+  }
+
+  #page-content-wrapper {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  #wrapper.toggled .sidebar {
+    margin-left: 0;
+  }
+
+  #wrapper.toggled #page-content-wrapper {
+    margin-left: 185px;
+  }
+
+  .navbar-toggler {
+    display: block;
+  }
+
+  #menu-toggle {
+    order: -1;
+  }
+
+  .form-row-compact {
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .sales-columns {
+    flex-direction: column;
+  }
+
+  .sales-columns .col-md-4,
+  .sales-columns .col-md-8 {
+    max-width: 100%;
+    flex: 0 0 100%;
+  }
 }
