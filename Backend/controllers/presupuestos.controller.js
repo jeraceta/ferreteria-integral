@@ -3,6 +3,8 @@ const { jsPDF } = require("jspdf");
 require("jspdf-autotable");
 const fs = require("fs");
 const path = require("path");
+const { createJsPdf } = require("../utils/pdfFormatHelper");
+const { getEmpresaConfig } = require("../config/empresa");
 
 /**
  * Crea un nuevo presupuesto en la base de datos.
@@ -50,14 +52,7 @@ const crearPresupuesto = async (req, res, next) => {
       `INSERT INTO presupuestos 
         (id_cliente, fecha_emision, fecha_vencimiento, subtotal, impuesto, monto_flete, tasa_bcv, total) 
         VALUES (?, NOW(), NOW() + INTERVAL 15 DAY, ?, ?, ?, ?, ?)`,
-      [
-        id_cliente,
-        subtotal,
-        impuesto,
-        monto_flete || 0.0,
-        tasa_bcv,
-        total,
-      ],
+      [id_cliente, subtotal, impuesto, monto_flete || 0.0, tasa_bcv, total],
     );
     const id_presupuesto = presupuestoResult.insertId;
 
@@ -65,7 +60,9 @@ const crearPresupuesto = async (req, res, next) => {
     for (const detalle of detalles) {
       const { id_producto, cantidad, precio_unitario } = detalle;
       if (!id_producto || cantidad <= 0 || precio_unitario === undefined) {
-        throw new Error(`El detalle del producto ID ${id_producto} es inválido.`);
+        throw new Error(
+          `El detalle del producto ID ${id_producto} es inválido.`,
+        );
       }
       await connection.query(
         "INSERT INTO detalle_presupuestos (id_presupuesto, id_producto, cantidad, precio_unitario) VALUES (?, ?, ?, ?)",
@@ -95,7 +92,21 @@ const generarPDFPresupuesto = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // 1. Obtener datos del presupuesto y del cliente.
+    // 1. Obtener datos de la empresa (Centralizado desde DB)
+    const [empresaData] = await pool.query(
+      "SELECT razon_social AS nombre, rif, direccion, telefono, logo_path FROM empresa_datos WHERE id = 1",
+    );
+    const configEstática = getEmpresaConfig();
+    const empresa = empresaData.length > 0 ? empresaData[0] : {
+      nombre: configEstática.nombre,
+      rif: configEstática.rif,
+      direccion: configEstática.direccion,
+      telefono: configEstática.telefono,
+      logo_path: null
+    };
+    empresa.email = configEstática.email;
+
+    // 2. Obtener datos del presupuesto y del cliente.
     // Se corrige la consulta para usar fecha_emision y traer fecha_vencimiento.
     const [presupuestoData] = await pool.query(
       `SELECT p.id, p.subtotal, p.impuesto, p.total, p.tasa_bcv, p.fecha_emision, p.fecha_vencimiento, p.monto_flete, 
@@ -126,10 +137,13 @@ const generarPDFPresupuesto = async (req, res, next) => {
       [id],
     );
 
-    // --- INICIALIZACIÓN Y CONFIGURACIÓN DEL DOCUMENTO ---
-    const doc = new jsPDF();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const pageWidth = doc.internal.pageSize.getWidth();
+    // --- 📄 DECISIÓN DE TAMAÑO ---
+    // El reporte mira la cantidad de filas del presupuesto antes de crear el PDF.
+    // Si hay 10 o menos artículos, elegimos Media Carta. Si hay más, Carta Completa.
+    const itemCount = detallesPresupuesto.length;
+    const { doc, pageWidth, pageHeight, isHalfLetter, label } =
+      createJsPdf(itemCount);
+    doc.setProperties({ title: `Presupuesto - ${label}` });
     const safeParseFloat = (value) => parseFloat(value) || 0.0;
 
     // --- MANEJO DE IMAGEN (LOGO) ---
@@ -149,10 +163,12 @@ const generarPDFPresupuesto = async (req, res, next) => {
       console.error("Error al cargar el logo:", error);
     }
 
-    // --- MARCA DE AGUA ---
+    // --- MARCA DE AGUA - MEDIA CARTA ---
+    // 🎯 Calculamos: Logo de fondo = 2.5" (45% del ancho disponible, perfecto para marca de agua)
+    // Antes era 120 unidades, ahora es 2.5 pulgadas proporcionadas al tamaño nuevo
     if (logoBase64) {
       const imgProps = doc.getImageProperties(logoBase64);
-      const logoWidth = 120;
+      const logoWidth = 2.5; // 🎯 Reducido de 120 a 2.5 pulgadas
       const logoHeight = (imgProps.height * logoWidth) / imgProps.width;
       const x = (pageWidth - logoWidth) / 2;
       const y = (pageHeight - logoHeight) / 2;
@@ -166,192 +182,197 @@ const generarPDFPresupuesto = async (req, res, next) => {
           "Fallo al aplicar GState para marca de agua. Usando sin opacidad.",
           e,
         );
-        doc.addImage(logoBase64, "PNG", x, y, logoWidth, logoHeight);
+        console.error("Error logo Presupuesto:", e);
       }
-      doc.restoreGraphicsState();
     }
 
-    // --- ENCABEZADO ---
+    // --- ENCABEZADO ESTANDARIZADO ---
+    let currentY = 0.25;
     if (logoBase64) {
-      doc.addImage(logoBase64, "PNG", 14, 10, 30, 30);
+      doc.addImage(logoBase64, "PNG", startX, currentY, 0.6, 0.6);
     }
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    // Asumiendo un nombre de empresa genérico, se puede cambiar
-    doc.text("Ramírez Suministros & Servicios, C.A.", 48, 18);
-    doc.text("RIF: J-12345678-9", 48, 24);
-    doc.text("Av. Principal, Local 1, Ciudad, Estado", 48, 30);
-    doc.text("Teléfono: 0212-1234567", 48, 36);
+    
+    let textStartX = logoBase64 ? startX + 0.7 : startX;
+    const maxTextWidth = (pageWidth / 2) - textStartX - 0.1;
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("PRESUPUESTO", pageWidth - 15, 20, { align: "right" });
+    doc.setFontSize(12);
+    const nameSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
+    doc.text(nameSplit, textStartX, currentY + 0.15);
+    
+    currentY += 0.15 + (nameSplit.length * 0.15);
 
-    // --- Bloque de control y fechas ---
-    const controlId = String(presupuesto.id).padStart(6, "0");
-    doc.setFontSize(10);
-    doc.text(`N° de Control:`, pageWidth - 60, 30);
+    doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
-    doc.text(controlId, pageWidth - 15, 30, { align: "right" });
+    doc.text(`RIF: ${empresa.rif}`, textStartX, currentY);
+    
+    currentY += 0.12;
+    const dirSplit = doc.splitTextToSize(`Dir: ${empresa.direccion}`, maxTextWidth);
+    doc.text(dirSplit, textStartX, currentY);
+    
+    currentY += (dirSplit.length * 0.1);
+    doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX, currentY);
 
+    // Título y Control (Derecha) - Movido hacia abajo para evitar superposición
+    const rightBoxWidth = 1.8;
+    const rightBoxX = pageWidth - startX - rightBoxWidth;
+    const rightBoxY = 0.8;
+    
+    doc.setDrawColor(100);
+    doc.setLineWidth(0.01);
+    doc.rect(rightBoxX, rightBoxY, rightBoxWidth, 0.5);
+    
     doc.setFont("helvetica", "bold");
-    doc.text(`Fecha de Emisión:`, pageWidth - 60, 36);
+    doc.setFontSize(11);
+    doc.text("PRESUPUESTO", rightBoxX + rightBoxWidth / 2, rightBoxY + 0.18, { align: "center" });
+    
     doc.setFont("helvetica", "normal");
-    doc.text(
-      new Date(presupuesto.fecha_emision).toLocaleDateString("es-VE"),
-      pageWidth - 15,
-      36,
-      { align: "right" },
-    );
+    doc.setFontSize(8);
+    doc.text(`N°: ${String(presupuesto.id).padStart(6, "0")}`, rightBoxX + 0.05, rightBoxY + 0.3);
+    doc.text(`Fecha: ${presupuesto.fecha_emision_fmt}`, rightBoxX + 0.05, rightBoxY + 0.4);
+    doc.text(`Válido hasta: ${new Date(presupuesto.fecha_vencimiento).toLocaleDateString("es-VE")}`, rightBoxX + 0.05, rightBoxY + 0.5);
 
-    doc.setFont("helvetica", "bold");
-    doc.text(`Válido hasta:`, pageWidth - 60, 42);
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      new Date(presupuesto.fecha_vencimiento).toLocaleDateString("es-VE"),
-      pageWidth - 15,
-      42,
-      { align: "right" },
-    );
+    currentY = Math.max(currentY + 0.2, rightBoxY + 0.6);
 
-    // --- BLOQUE DE CLIENTE ---
-    doc.setDrawColor(200);
-    doc.rect(14, 48, pageWidth - 28, 25); // Recuadro para el cliente
+    // --- Cuadrícula de Cliente y Condiciones (2 Columnas con Bordes) ---
+    const boxHeight = 0.8;
+    const startX = 0.25;
+    doc.setDrawColor(100);
+    doc.setLineWidth(0.01);
+    doc.rect(startX, currentY, pageWidth - 2 * startX, boxHeight);
+    
+    const midX = pageWidth / 2;
+    doc.line(midX, currentY, midX, currentY + boxHeight);
+    
+    const col1X = startX + 0.05;
+    const col2X = midX + 0.05;
+    let innerY = currentY + 0.15;
+    
     doc.setFont("helvetica", "bold");
-    doc.text("CLIENTE", 18, 54);
+    doc.setFontSize(8);
+    doc.text("CLIENTE", col1X, innerY);
+    doc.text("CONDICIONES", col2X, innerY);
+    
+    innerY += 0.15;
+    
     doc.setFont("helvetica", "normal");
-    doc.text(`Razón Social: ${presupuesto.razon_social}`, 18, 60);
-    doc.text(`RIF/Cédula: ${presupuesto.rif_cedula}`, 18, 66);
-    doc.text(`Teléfono: ${presupuesto.telefono || "N/A"}`, 120, 60);
-    doc.text(`Dirección: ${presupuesto.direccion_fiscal || "N/A"}`, 18, 72);
+    const nombreSplit = doc.splitTextToSize(`Nombre: ${presupuesto.razon_social}`, midX - startX - 0.1);
+    doc.text(nombreSplit, col1X, innerY);
+    
+    doc.text(`Válido por: 15 días`, col2X, innerY);
+    
+    innerY += (nombreSplit.length * 0.12);
+    doc.text(`CI/RIF: ${presupuesto.rif_cedula}`, col1X, innerY);
+    doc.text(`Tasa BCV Ref: ${safeParseFloat(presupuesto.tasa_bcv).toFixed(2)} Bs`, col2X, innerY);
+    
+    innerY += 0.15;
+    doc.text(`Teléfono: ${presupuesto.telefono || "N/A"}`, col1X, innerY);
+    
+    innerY += 0.15;
+    const addrSplit = doc.splitTextToSize(`Dirección: ${presupuesto.direccion_fiscal || "N/A"}`, midX - startX - 0.1);
+    doc.text(addrSplit, col1X, innerY);
+
+    currentY += boxHeight + 0.15;
 
     // --- TABLA DE ARTÍCULOS ---
     const tableBody = detallesPresupuesto.map((d) => {
-      // Combina descripción y marca, solo si la marca existe.
-      const descripcionCompleta = d.marca ? `${d.descripcion} (${d.marca})` : d.descripcion;
+      const descripcionCompleta = d.marca ? `${d.descripcion} [${d.marca}]` : d.descripcion;
       return [
-        d.codigo,
-        descripcionCompleta,
         d.cantidad,
+        descripcionCompleta,
         `$${safeParseFloat(d.precio_unitario).toFixed(2)}`,
         `$${safeParseFloat(d.total).toFixed(2)}`,
       ];
     });
+    const col0w = 0.5; // Cantidad
+    const col2w = 0.8; // Precio Unit.
+    const col3w = 0.8; // Total
+    const col1w = (pageWidth - 2 * startX) - col0w - col2w - col3w; // Descripción
 
     doc.autoTable({
-      startY: 78,
-      head: [["Código", "Descripción", "Cantidad", "Precio Unit.", "Total"]],
+      startY: currentY,
+      head: [["Cant.", "Descripción", "Precio Unit.", "Total"]],
       body: tableBody,
       theme: "grid",
+      margin: { left: startX, right: startX },
       headStyles: {
-        fillColor: [30, 81, 123], // Azul oscuro profesional
+        fillColor: [30, 81, 123],
         textColor: 255,
         fontStyle: "bold",
+        fontSize: 8,
+      },
+      bodyStyles: {
+        fontSize: 7,
+        cellPadding: 0.05,
       },
       columnStyles: {
-        0: { cellWidth: 25 }, // Código
-        1: { cellWidth: 'auto' }, // Descripción se ajusta
-        2: { cellWidth: 20, halign: 'center' }, // Cantidad
-        3: { cellWidth: 30, halign: 'right' }, // Precio
-        4: { cellWidth: 30, halign: 'right' }, // Total
+        0: { cellWidth: col0w, halign: "center" },
+        1: { cellWidth: col1w, overflow: "linebreak" },
+        2: { cellWidth: col2w, halign: "right" },
+        3: { cellWidth: col3w, halign: "right" },
       },
-      styles: { lineWidth: 0.1, lineColor: [220, 220, 220] },
-      alternateRowStyles: { fillColor: [245, 245, 245] },
+      styles: { lineWidth: 0.01, lineColor: [200, 200, 200] },
+      alternateRowStyles: { fillColor: [245, 248, 255] },
     });
 
     // --- BLOQUE DE TOTALES ---
-    let finalY = doc.lastAutoTable.finalY;
-    const finalYAnchor = pageHeight - 35; // Ancla para el pie de página
-    let currentY;
+    currentY = doc.lastAutoTable.finalY + 0.2;
 
-    if (finalY > finalYAnchor - 40) {
+    if (currentY > pageHeight - 1.5) {
       doc.addPage();
-      currentY = 40;
-    } else {
-      currentY = Math.max(finalY + 10, finalYAnchor - 40);
+      currentY = 0.5;
     }
 
-    const totalXAlign = pageWidth - 70;
-    const valueXAlign = pageWidth - 15;
+    const lblX = 3.8;
+    const valX = 5.2;
+    const lineH = 0.15;
 
-    doc.setFontSize(10);
+    doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
-    doc.text("Subtotal:", totalXAlign, currentY, { align: "left" });
-    doc.text(
-      `$${safeParseFloat(presupuesto.subtotal).toFixed(2)}`,
-      valueXAlign,
-      currentY,
-      { align: "right" },
-    );
-    currentY += 7;
+    
+    doc.text("SUBTOTAL:", lblX, currentY);
+    doc.text(`$${safeParseFloat(presupuesto.subtotal).toFixed(2)}`, valX, currentY, { align: "right" });
+    currentY += lineH;
 
     if (presupuesto.monto_flete > 0) {
-      doc.text("Flete / Envío:", totalXAlign, currentY, { align: "left" });
-      doc.text(
-        `$${safeParseFloat(presupuesto.monto_flete).toFixed(2)}`,
-        valueXAlign,
-        currentY,
-        { align: "right" },
-      );
-      currentY += 7;
+      doc.text("FLETE:", lblX, currentY);
+      doc.text(`$${safeParseFloat(presupuesto.monto_flete).toFixed(2)}`, valX, currentY, { align: "right" });
+      currentY += lineH;
     }
 
-    doc.text("IVA (16%):", totalXAlign, currentY, { align: "left" });
-    doc.text(
-      `$${safeParseFloat(presupuesto.impuesto).toFixed(2)}`,
-      valueXAlign,
-      currentY,
-      { align: "right" },
-    );
-    currentY += 10;
+    doc.text("IVA (16%):", lblX, currentY);
+    doc.text(`$${safeParseFloat(presupuesto.impuesto).toFixed(2)}`, valX, currentY, { align: "right" });
+    currentY += lineH;
 
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("TOTAL A PAGAR:", totalXAlign, currentY, { align: "left" });
-    doc.text(
-      `$${safeParseFloat(presupuesto.total).toFixed(2)}`,
-      valueXAlign,
-      currentY,
-      { align: "right" },
-    );
-    currentY += 8;
-
-    const totalBolivares =
-      safeParseFloat(presupuesto.total) * safeParseFloat(presupuesto.tasa_bcv);
     doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      "Total en Bolívares (referencial):",
-      totalXAlign,
-      currentY,
-      { align: "left" },
-    );
-    doc.text(
-      `${totalBolivares.toFixed(2)} Bs.`,
-      valueXAlign,
-      currentY,
-      { align: "right" },
-    );
-    currentY += 6;
+    doc.setFont("helvetica", "bold");
+    doc.text("TOTAL A PAGAR:", lblX, currentY);
+    doc.text(`$${safeParseFloat(presupuesto.total).toFixed(2)}`, valX, currentY, { align: "right" });
+    currentY += lineH;
 
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    const totalBolivares = safeParseFloat(presupuesto.total) * safeParseFloat(presupuesto.tasa_bcv);
+    doc.text("TOTAL EN BS:", lblX, currentY);
+    doc.text(`${totalBolivares.toFixed(2)} Bs.`, valX, currentY, { align: "right" });
+    
     doc.setTextColor(100);
     doc.text(
-      `Tasa $ Aplicada: ${safeParseFloat(presupuesto.tasa_bcv).toFixed(
-        2,
-      )} Bs.`,
-      totalXAlign,
+      `Tasa $ Referencial: ${safeParseFloat(presupuesto.tasa_bcv).toFixed(2)} Bs.`,
+      pageWidth - 3.5,
       currentY,
-      { align: "left" },
+      { align: "left" }
     );
     doc.setTextColor(0);
 
-    // --- PIE DE PÁGINA ---
-    doc.setFontSize(8);
+    // Pie de Página Dinámico
+    currentY += 0.3;
+
+    doc.setFontSize(7);
     doc.setFont("helvetica", "italic");
-    const footerText =
-      "Este presupuesto es válido por 15 días continuos a partir de su fecha de emisión. Los precios están sujetos a cambio sin previo aviso. La disponibilidad de los productos está sujeta a la existencia en inventario al momento de concretar la compra.";
-    const splitFooter = doc.splitTextToSize(footerText, pageWidth - 28);
-    doc.text(splitFooter, 14, pageHeight - 20);
+    const footerText = "Nota: Este presupuesto tiene una validez de 15 días continuos. Los precios están sujetos a cambio sin previo aviso. No asegura reserva de mercancía.";
+    const splitFooter = doc.splitTextToSize(footerText, pageWidth - 2 * startX);
+    doc.text(splitFooter, startX, currentY);
 
     // --- ENVIAR PDF ---
     const pdfBuffer = doc.output("arraybuffer");

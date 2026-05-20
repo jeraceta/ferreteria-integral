@@ -44,24 +44,44 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // 5. Lógica de Control de Acceso por Rol.
-        const userData = localStorage.getItem("user"); // Corregido: 'user' en vez de 'usuario'
+        const userData = localStorage.getItem("user");
         if (userData) {
           try {
             const user = JSON.parse(userData);
             if (user && user.rol !== "Administrador") {
-              const navUsuarios = document.getElementById("nav-usuarios");
-              if (navUsuarios) navUsuarios.style.display = "none";
+              // Ocultar Gestión de Usuarios (ahora es Configuración, pero se maneja dentro de la página)
+              // const navUsuarios = document.getElementById("nav-usuarios");
+              // if (navUsuarios) navUsuarios.style.display = "none";
+              // Ocultar Historial de Cierres (solo admins pueden ver cierres pasados)
+              const navHistorialCierres = document.getElementById(
+                "menu-historial-cierres",
+              );
+              if (navHistorialCierres)
+                navHistorialCierres.style.display = "none";
+              // Ocultar Cierre de Caja
+              const navCaja = document.getElementById("menu-caja");
+              if (navCaja) navCaja.style.display = "none";
+              // 🚫 Ocultar Ajuste de Inventario (solo para administradores)
+              const navAjusteInventario = document.getElementById(
+                "menu-ajuste-inventario",
+              );
+              if (navAjusteInventario)
+                navAjusteInventario.style.display = "none";
+              // 🚫 Ocultar Tesorería (CxC/CxP) (solo para administradores)
+              const navTesoreria = document.getElementById("menu-tesoreria");
+              if (navTesoreria) navTesoreria.style.display = "none";
             }
           } catch (e) {
             console.error("Error al parsear los datos del usuario:", e);
           }
         }
 
-        // 6. Lógica del botón de Cerrar Sesión.
-        const btnSalir = document.getElementById("btnCerrarSesion");
+        // 7. Lógica del botón de Cerrar Sesión.
+        const btnSalir = document.getElementById("logout-button");
         if (btnSalir) {
           btnSalir.addEventListener("click", (e) => {
-            e.preventDefault();
+            e.preventDefault(); // 🛑 Evita que el enlace actúe como un link normal
+            // 💬 Mostramos una confirmación para que el usuario esté seguro
             Swal.fire({
               title: "¿Cerrar Sesión?",
               text: "Tendrás que ingresar tus credenciales nuevamente para acceder.",
@@ -71,8 +91,12 @@ document.addEventListener("DOMContentLoaded", () => {
               cancelButtonText: "Cancelar",
             }).then((result) => {
               if (result.isConfirmed) {
-                localStorage.clear();
-                window.location.href = "login.html";
+                // ✅ El usuario confirmó que quiere salir
+                localStorage.clear(); // 🧹 Limpiamos TODO del almacenamiento local (token, usuario, etc)
+                // 🎯 Navegamos a login usando una RUTA ABSOLUTA desde la raíz del servidor
+                // De esta forma, funciona sin importar en qué página o subcarpeta esté el usuario!
+                // Usamos /frontend/login.html porque así está configurado el servidor
+                window.location.href = "/frontend/login.html";
               }
             });
           });

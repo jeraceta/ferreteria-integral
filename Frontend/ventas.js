@@ -30,6 +30,47 @@ document.addEventListener("DOMContentLoaded", () => {
   const API_VENTAS_URL = "http://localhost:3000/api/ventas";
   const API_PRODUCTOS_URL = "http://localhost:3000/api/productos";
 
+  // --- NUEVA LÓGICA DE VERIFICACIÓN DE CAJA ---
+  const verificarEstadoCaja = async () => {
+    try {
+      const response = await fetch(`${API_VENTAS_URL}/estado-caja`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      if (!response.ok) {
+        console.warn(
+          "No se pudo verificar el estado de la caja. El backend aplicará la validación final.",
+        );
+        return;
+      }
+      const data = await response.json();
+      if (data.cajaCerrada) {
+        const btnTotalizar = document.querySelector(
+          "button[onclick='abrirModalTotalizar()']",
+        );
+        if (btnTotalizar) {
+          btnTotalizar.disabled = true;
+          btnTotalizar.innerHTML =
+            '<i class="fas fa-lock me-2"></i> CAJA CERRADA';
+          btnTotalizar.classList.remove("btn-primary");
+          btnTotalizar.classList.add("btn-danger");
+        }
+        const banner = document.getElementById("bannerCajaCerrada");
+        if (banner) {
+          banner.classList.remove("d-none");
+        }
+        if (inputBusqueda) {
+          inputBusqueda.disabled = true;
+          inputBusqueda.placeholder =
+            "La caja está cerrada. No se pueden agregar productos.";
+        }
+      }
+    } catch (error) {
+      console.error("Error al verificar estado de la caja:", error);
+    }
+  };
+
   // --- DEFINICIÓN DE FUNCIONES ---
 
   /**
@@ -446,7 +487,9 @@ document.addEventListener("DOMContentLoaded", () => {
     inputBusqueda.value = "";
     listaSugerencias.innerHTML = "";
     listaSugerencias.style.display = "none";
-    inputBusqueda.focus();
+    setTimeout(() => {
+        inputBusqueda.focus();
+    }, 10);
   }
 
   function mostrarSugerencias(productos) {
@@ -484,7 +527,10 @@ document.addEventListener("DOMContentLoaded", () => {
         item.classList.add("disabled-suggestion");
         item.title = "Sin existencia en inventario";
       } else {
-        item.addEventListener("mousedown", () => seleccionarProducto(producto));
+        item.addEventListener("mousedown", (e) => {
+          e.preventDefault(); // Mantiene el foco en el input
+          seleccionarProducto(producto);
+        });
       }
       listaSugerencias.appendChild(item);
     });
@@ -549,6 +595,7 @@ document.addEventListener("DOMContentLoaded", () => {
     cobrarIvaSwitch.addEventListener("change", actualizarTotales);
 
   // --- Ejecuciones Iniciales ---
+  verificarEstadoCaja(); // Llamar a la nueva función
   actualizarTotales();
 
   // ===================================================================
@@ -809,24 +856,31 @@ document.addEventListener("DOMContentLoaded", () => {
         cancelButtonText: "No, finalizar",
       }).then(async (action) => {
         if (action.isConfirmed) {
-          // CORRECCIÓN: Usar fetch para enviar el token y obtener el PDF
-          try {
-            const response = await fetch(
-              `${API_VENTAS_URL}/reporte/${result.id_venta}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${localStorage.getItem("token")}`,
+          // Fase 3: Abrir la ventana emergente ANTES del fetch para evitar el bloqueo del navegador
+          const pdfWindow = window.open("", "_blank");
+          if (!pdfWindow) {
+            Swal.fire("Atención", "El navegador bloqueó la ventana emergente. Por favor, permita ventanas emergentes para este sitio.", "warning");
+          } else {
+            pdfWindow.document.write("<h3>Generando Factura PDF...</h3>");
+            try {
+              const response = await fetch(
+                `${API_VENTAS_URL}/reporte/${result.id_venta}`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                  },
                 },
-              },
-            );
-            if (!response.ok) throw new Error("No se pudo generar el PDF.");
-
-            const blob = await response.blob();
-            const pdfUrl = URL.createObjectURL(blob);
-            window.open(pdfUrl, "_blank");
-            setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000); // Limpiar memoria
-          } catch (pdfError) {
-            Swal.fire("Error de Reporte", pdfError.message, "error");
+              );
+              if (!response.ok) throw new Error("No se pudo generar el PDF.");
+  
+              const blob = await response.blob();
+              const pdfUrl = URL.createObjectURL(blob);
+              pdfWindow.location.href = pdfUrl;
+              setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000); // Limpiar memoria
+            } catch (pdfError) {
+              pdfWindow.close();
+              Swal.fire("Error de Reporte", pdfError.message, "error");
+            }
           }
         }
         window.location.reload();

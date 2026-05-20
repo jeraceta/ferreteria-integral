@@ -22,6 +22,9 @@ router.get(
 router.get("/tasa-bcv", requiereAuth, ventasController.obtenerUltimaTasa);
 // Ruta para generar el reporte PDF de una venta
 router.get("/reporte/:id", requiereAuth, ventasController.generarComprobante);
+
+// NUEVO: Ruta para que el frontend verifique si la caja está cerrada
+router.get("/estado-caja", requiereAuth, ventasController.verificarEstadoCaja);
 // Rutas para la gestión de devoluciones
 router.get(
   "/motivos-devolucion",
@@ -61,5 +64,10 @@ router.post(
   ventasController.generarCierreZ,
 );
 
+// Rutas para historial de cierres
+router.get("/historial-cierres", requiereAuth, esAdmin, ventasController.obtenerHistorialCierres);
+router.get("/historial-cierres/:id", requiereAuth, esAdmin, ventasController.obtenerDetalleCierre);
+
 // Exporta el enrutador configurado.
 module.exports = router;
+

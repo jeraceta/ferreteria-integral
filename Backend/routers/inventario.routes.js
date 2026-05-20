@@ -37,7 +37,23 @@ const {
   obtenerProductosMasVendidos,
   obtenerVentasPorMetodoPago,
   obtenerInventarioCritico,
+  consultarInventario,
+  generarReporteInventarioPDF,
+  exportarInventarioExcel,
+  obtenerDashboardKPIs,
+  obtenerGananciasPorCategoria,
 } = require("../controllers/inventario.controller");
+
+// --- RUTAS DEL MÓDULO DE INVENTARIO (Consulta y Reportes) ---
+
+// Consulta flexible de inventario con filtros
+router.get("/consulta", requiereAuth, consultarInventario);
+
+// Generar reporte PDF de inventario con opciones configurables
+router.get("/reporte-pdf", requiereAuth, generarReporteInventarioPDF);
+
+// Exportar inventario a Excel con fórmulas y valoración
+router.get("/exportar-excel", requiereAuth, exportarInventarioExcel);
 
 // --- 1. AUTENTICACIÓN ---
 
@@ -70,12 +86,10 @@ router.post(
       const jwtSecret = process.env.JWT_SECRET;
 
       if (!jwtSecret) {
-        return res
-          .status(500)
-          .json({
-            success: false,
-            error: "JWT secret not configured on server",
-          });
+        return res.status(500).json({
+          success: false,
+          error: "JWT secret not configured on server",
+        });
       }
 
       const token = jwt.sign(
@@ -132,12 +146,9 @@ router.get("/reporte-comisiones", esAdmin, async (req, res, next) => {
     const { inicio, fin, porcentaje } = req.query;
 
     if (!inicio || !fin || !porcentaje) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Faltan parámetros: inicio, fin y porcentaje son obligatorios.",
-        });
+      return res.status(400).json({
+        error: "Faltan parámetros: inicio, fin y porcentaje son obligatorios.",
+      });
     }
 
     const ventasVendedores = await obtenerVentasPorVendedor(inicio, fin);
@@ -184,9 +195,9 @@ router.post("/producto", requiereAuth, esAdmin, async (req, res, next) => {
 
 // Actualizar un producto existente (from HEAD)
 
-router.put("/producto/:id", requiereAuth, esAdmin, async (req, res, next) => {
+router.put("/producto/:id", requiereAuth, async (req, res, next) => {
   try {
-    await actualizarProducto(req.params.id, req.body);
+    await actualizarProducto(req, req.params.id, req.body);
 
     res.json({ success: true, mensaje: "Producto actualizado correctamente" });
   } catch (error) {
@@ -343,12 +354,10 @@ router.post(
 
       const resultado = await procesarAjusteInventario(req.body);
 
-      res
-        .status(200)
-        .json({
-          success: true,
-          detallesProcesados: resultado.detallesProcesados,
-        });
+      res.status(200).json({
+        success: true,
+        detallesProcesados: resultado.detallesProcesados,
+      });
     } catch (error) {
       next(error);
     }
@@ -537,6 +546,26 @@ router.get(
     }
   },
 );
+
+// Datos combinados para los KPIs del Dashboard
+router.get("/dashboard-kpis", requiereAuth, async (req, res, next) => {
+  try {
+    const data = await obtenerDashboardKPIs();
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Datos para el gráfico de ganancias por categoría
+router.get("/ganancias-por-categoria", requiereAuth, async (req, res, next) => {
+  try {
+    const data = await obtenerGananciasPorCategoria();
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Reporte de valoración total del inventario
 

@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tesorería (CxC y CxP) - Ferretería</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- FontAwesome CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+    <!-- SweetAlert2 CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
+    <!-- Custom CSS -->
+    <script src="theme.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="auth.js"></script>
+    <style>
+      .nav-pills .nav-link {
+        border-radius: 0.5rem;
+        color: #6c757d;
+        font-weight: 500;
+        padding: 0.5rem 1rem;
+        margin-right: 0.5rem;
+        transition: all 0.3sease;
+      }
+      .nav-pills .nav-link.active, .nav-pills .show > .nav-link {
+        color: #fff;
+        background-color: #0d6efd;
+        box-shadow: 0 4px 6px rgba(13, 110, 253, 0.2);
+      }
+      .nav-pills .nav-link:hover:not(.active) {
+        background-color: #e9ecef;
+      }
+      .card-kpi {
+        transition: transform 0.2s;
+        border-radius: 1rem;
+      }
+      .card-kpi:hover {
+        transform: translateY(-3px);
+      }
+      .table-container {
+        border-radius: 1rem;
+        overflow: hidden;
+      }
+      .empty-state {
+        padding: 4rem 2rem;
+        text-align: center;
+      }
+      .empty-state-icon {
+        font-size: 4rem;
+        color: #dee2e6;
+        margin-bottom: 1.5rem;
+      }
+    </style>
+  </head>
+  <body class="bg-light">
+    <div id="wrapper">
+      <!-- Sidebar dinámico -->
+      <div id="sidebar-container"></div>
+      
+      <!-- Page Content -->
+      <div id="page-content-wrapper">
+        <div class="container-fluid content-offset pb-5">
+          <main>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <h1 class="mb-0 fw-bold">Tesorería (CxC y CxP)</h1>
+            </div>
+
+            <!-- Tabs de navegación -->
+            <ul class="nav nav-pills mb-4" id="pills-tab" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="pills-cxc-tab" data-bs-toggle="pill" data-bs-target="#pills-cxc" type="button" role="tab" aria-controls="pills-cxc" aria-selected="true">
+                  <i class="fas fa-hand-holding-usd me-2"></i>Cuentas por Cobrar (Clientes)
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pills-cxp-tab" data-bs-toggle="pill" data-bs-target="#pills-cxp" type="button" role="tab" aria-controls="pills-cxp" aria-selected="false">
+                  <i class="fas fa-file-invoice-dollar me-2"></i>Cuentas por Pagar (Proveedores)
+                </button>
+              </li>
+            </ul>
+
+            <div class="tab-content" id="pills-tabContent">
+              
+              <!-- SECCIÓN: CUENTAS POR COBRAR -->
+              <div class="tab-pane fade show active" id="pills-cxc" role="tabpanel" aria-labelledby="pills-cxc-tab">
+                
+                <!-- KPIs CxC -->
+                <div class="row g-3 mb-4">
+                  <div class="col-md-4">
+                    <div class="card border-0 shadow-sm card-kpi h-100">
+                      <div class="card-body d-flex align-items-center">
+                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 me-3 text-danger">
+                          <i class="fas fa-clock fa-lg"></i>
+                        </div>
+                        <div>
+                          <h6 class="text-muted mb-0 small">Total Vencido</h6>
+                          <h4 class="fw-bold mb-0" id="kpi-cxc-vencido">$0.00</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="card border-0 shadow-sm card-kpi h-100">
+                      <div class="card-body d-flex align-items-center">
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3 text-warning">
+                          <i class="fas fa-hourglass-half fa-lg"></i>
+                        </div>
+                        <div>
+                          <h6 class="text-muted mb-0 small">Total Pendiente</h6>
+                          <h4 class="fw-bold mb-0" id="kpi-cxc-pendiente">$0.00</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="card border-0 shadow-sm card-kpi h-100">
+                      <div class="card-body d-flex align-items-center">
+                        <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3 text-success">
+                          <i class="fas fa-coins fa-lg"></i>
+                        </div>
+                        <div>
+                          <h6 class="text-muted mb-0 small">Abonos del Mes</h6>
+                          <h4 class="fw-bold mb-0" id="kpi-cxc-abonos">$0.00</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Contenedor Principal CxC -->
+                <div class="card border-0 shadow-sm rounded-4">
+                  <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center rounded-top-4">
+                    <h5 class="mb-0 fw-bold">Cuentas por Cobrar</h5>
+                    <div>
+                      <button class="btn btn-outline-secondary btn-sm me-2">
+                        <i class="fas fa-filter me-1"></i>Filtrar
+                      </button>
+                      <button class="btn btn-danger btn-sm me-2" onclick="exportarPdfCxC()">
+                        <i class="fas fa-file-pdf me-1"></i>PDF
+                      </button>
+                      <button class="btn btn-success btn-sm me-2" onclick="exportarExcelCxC()">
+                        <i class="fas fa-file-excel me-1"></i>Excel
+                      </button>
+                      <button class="btn btn-primary btn-sm" onclick="abrirModalCxC()">
+                        <i class="fas fa-plus me-1"></i>Nueva CxC
+                      </button>
+                    </div>
+                  </div>
+                  <div class="card-body p-0">
+                    <div class="table-responsive table-container">
+                      <table class="table table-hover align-middle mb-0" id="tabla-cxc">
+                        <!-- Head and body rendered via JS -->
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- SECCIÓN: CUENTAS POR PAGAR -->
+              <div class="tab-pane fade" id="pills-cxp" role="tabpanel" aria-labelledby="pills-cxp-tab">
+                
+                <!-- KPIs CxP -->
+                <div class="row g-3 mb-4">
+                  <div class="col-md-4">
+                    <div class="card border-0 shadow-sm card-kpi h-100">
+                      <div class="card-body d-flex align-items-center">
+                        <div class="rounded-circle bg-danger bg-opacity-10 p-3 me-3 text-danger">
+                          <i class="fas fa-calendar-times fa-lg"></i>
+                        </div>
+                        <div>
+                          <h6 class="text-muted mb-0 small">Total Vencido</h6>
+                          <h4 class="fw-bold mb-0" id="kpi-cxp-vencido">$0.00</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="card border-0 shadow-sm card-kpi h-100">
+                      <div class="card-body d-flex align-items-center">
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3 text-warning">
+                          <i class="fas fa-exclamation-circle fa-lg"></i>
+                        </div>
+                        <div>
+                          <h6 class="text-muted mb-0 small">Total Pendiente (Deuda)</h6>
+                          <h4 class="fw-bold mb-0" id="kpi-cxp-pendiente">$0.00</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="card border-0 shadow-sm card-kpi h-100">
+                      <div class="card-body d-flex align-items-center">
+                        <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3 text-success">
+                          <i class="fas fa-money-check-alt fa-lg"></i>
+                        </div>
+                        <div>
+                          <h6 class="text-muted mb-0 small">Abonos Realizados del Mes</h6>
+                          <h4 class="fw-bold mb-0" id="kpi-cxp-abonos">$0.00</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Contenedor Principal CxP -->
+                <div class="card border-0 shadow-sm rounded-4 mb-4">
+                  <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center rounded-top-4">
+                    <h5 class="mb-0 fw-bold">Cuentas por Pagar (Activas)</h5>
+                    <div>
+                      <button class="btn btn-outline-secondary btn-sm me-2" onclick="toggleHistorialCxP()">
+                        <i class="fas fa-history me-1"></i>Ver Pagadas
+                      </button>
+                      <button class="btn btn-danger btn-sm me-2" onclick="exportarPdfCxP()">
+                        <i class="fas fa-file-pdf me-1"></i>PDF
+                      </button>
+                      <button class="btn btn-success btn-sm me-2" onclick="exportarExcelCxP()">
+                        <i class="fas fa-file-excel me-1"></i>Excel
+                      </button>
+                      <button class="btn btn-primary btn-sm" onclick="abrirModalCxP()">
+                        <i class="fas fa-plus me-1"></i>Nueva CxP
+                      </button>
+                    </div>
+                  </div>
+                  <div class="card-body p-0">
+                    <div class="table-responsive table-container">
+                      <table class="table table-hover align-middle mb-0" id="tabla-cxp">
+                        <!-- Head and body rendered via JS -->
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modales para Pagos Diálogos -->
+    
+    <!-- Modal Registrar Abono -->
+    <div class="modal fade" id="modalAbono" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content rounded-4 border-0 shadow">
+          <div class="modal-header bg-primary text-white rounded-top-4">
+            <h5 class="modal-title"><i class="fas fa-money-bill-wave me-2"></i>Registrar Abono</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="formAbono">
+              <input type="hidden" id="abonoId">
+              <input type="hidden" id="abonoTipo">
+              
+              <div class="alert alert-info py-2 small mb-3">
+                <strong>Saldo Restante:</strong> <span id="abonoSaldoRestante" class="fs-6fw-bold">$0.00</span>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label form-label-sm">Monto a Abonar ($)</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fas fa-dollar-sign"></i></span>
+                  <input type="number" step="0.01" min="0.01" class="form-control" id="montoAbono" required>
+                </div>
+              </div>
+              
+              <div class="mb-3">
+                <label class="form-label form-label-sm">Comprobante / Soporte de Pago</label>
+                <input type="text" class="form-control" id="soporteAbono" placeholder="Ej: Ref. Transferencia 123456" required>
+              </div>
+
+              <div class="d-flex justify-content-end mt-4">
+                <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Abono</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Nueva CxC -->
+    <div class="modal fade" id="modalNuevaCxc" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content rounded-4 border-0 shadow">
+          <div class="modal-header bg-primary text-white rounded-top-4">
+            <h5 class="modal-title"><i class="fas fa-plus-circle me-2"></i>Nueva Cuenta por Cobrar</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="formNuevaCxc">
+              <input type="hidden" id="cxcClienteId">
+              <div class="mb-3">
+                <label class="form-label form-label-sm">Cliente</label>
+                <div class="search-select-wrapper">
+                  <input type="text" class="form-control" id="cxcClienteBuscar" placeholder="Buscar por nombre o cédula..." autocomplete="off" required>
+                  <div class="search-select-list" id="cxcClienteLista"></div>
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label form-label-sm">Factura / Número de Referencia</label>
+                <input type="text" class="form-control" id="cxcFactura" required>
+              </div>
+              <div class="row mb-3">
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Fecha de Vencimiento</label>
+                  <input type="date" class="form-control" id="cxcVencimiento" required>
+                </div>
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Monto Total ($)</label>
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-dollar-sign"></i></span>
+                    <input type="number" step="0.01" min="0.01" class="form-control" id="cxcTotal" required>
+                  </div>
+                </div>
+              </div>
+              <div class="d-flex justify-content-end mt-4">
+                <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Cuenta</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Nueva CxP -->
+    <div class="modal fade" id="modalNuevaCxp" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content rounded-4 border-0 shadow">
+          <div class="modal-header bg-primary text-white rounded-top-4">
+            <h5 class="modal-title"><i class="fas fa-plus-circle me-2"></i>Nueva Cuenta por Pagar</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="formNuevaCxp">
+              <input type="hidden" id="cxpProveedorId">
+              <div class="mb-3">
+                <label class="form-label form-label-sm">Proveedor</label>
+                <div class="search-select-wrapper">
+                  <input type="text" class="form-control" id="cxpProveedorBuscar" placeholder="Buscar por nombre o RIF..." autocomplete="off" required>
+                  <div class="search-select-list" id="cxpProveedorLista"></div>
+                </div>
+              </div>
+              <div class="row mb-3">
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Factura (Opcional)</label>
+                  <input type="text" class="form-control" id="cxpFactura">
+                </div>
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Concepto</label>
+                  <input type="text" class="form-control" id="cxpConcepto" required placeholder="Ej: Mercancía...">
+                </div>
+              </div>
+              <div class="row mb-3">
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Fecha de Vencimiento</label>
+                  <input type="date" class="form-control" id="cxpVencimiento" required>
+                </div>
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Monto Total ($)</label>
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-dollar-sign"></i></span>
+                    <input type="number" step="0.01" min="0.01" class="form-control" id="cxpTotal" required>
+                  </div>
+                </div>
+              </div>
+              <div class="d-flex justify-content-end mt-4">
+                <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Cuenta</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Editar CxC -->
+    <div class="modal fade" id="modalEditarCxc" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content rounded-4 border-0 shadow">
+          <div class="modal-header bg-warning text-dark rounded-top-4">
+            <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Editar Cuenta por Cobrar</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="formEditarCxc">
+              <input type="hidden" id="editCxcId">
+              <input type="hidden" id="editCxcClienteId">
+              <div class="mb-3">
+                <label class="form-label form-label-sm">Cliente</label>
+                <div class="search-select-wrapper">
+                  <input type="text" class="form-control" id="editCxcClienteBuscar" placeholder="Buscar por nombre o cédula..." autocomplete="off" required>
+                  <div class="search-select-list" id="editCxcClienteLista"></div>
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label form-label-sm">Factura / Número de Referencia</label>
+                <input type="text" class="form-control" id="editCxcFactura" required>
+              </div>
+              <div class="row mb-3">
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Fecha de Vencimiento</label>
+                  <input type="date" class="form-control" id="editCxcVencimiento" required>
+                </div>
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Monto Total ($)</label>
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-dollar-sign"></i></span>
+                    <input type="number" step="0.01" min="0.01" class="form-control" id="editCxcTotal" required>
+                  </div>
+                </div>
+              </div>
+              <div class="d-flex justify-content-end mt-4">
+                <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-warning text-dark">Actualizar Cuenta</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Editar CxP -->
+    <div class="modal fade" id="modalEditarCxp" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content rounded-4 border-0 shadow">
+          <div class="modal-header bg-warning text-dark rounded-top-4">
+            <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Editar Cuenta por Pagar</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="formEditarCxp">
+              <input type="hidden" id="editCxpId">
+              <input type="hidden" id="editCxpProveedorId">
+              <div class="mb-3">
+                <label class="form-label form-label-sm">Proveedor</label>
+                <div class="search-select-wrapper">
+                  <input type="text" class="form-control" id="editCxpProveedorBuscar" placeholder="Buscar por nombre o RIF..." autocomplete="off" required>
+                  <div class="search-select-list" id="editCxpProveedorLista"></div>
+                </div>
+              </div>
+              <div class="row mb-3">
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Factura (Opcional)</label>
+                  <input type="text" class="form-control" id="editCxpFactura">
+                </div>
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Concepto</label>
+                  <input type="text" class="form-control" id="editCxpConcepto" required>
+                </div>
+              </div>
+              <div class="row mb-3">
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Fecha de Vencimiento</label>
+                  <input type="date" class="form-control" id="editCxpVencimiento" required>
+                </div>
+                <div class="col-6">
+                  <label class="form-label form-label-sm">Monto Total ($)</label>
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-dollar-sign"></i></span>
+                    <input type="number" step="0.01" min="0.01" class="form-control" id="editCxpTotal" required>
+                  </div>
+                </div>
+              </div>
+              <div class="d-flex justify-content-end mt-4">
+                <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-warning text-dark">Actualizar Cuenta</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      /* Searchable dropdown */
+      .search-select-wrapper { position: relative; }
+      .search-select-list {
+        position: absolute; z-index: 1055; width: 100%;
+        max-height: 220px; overflow-y: auto;
+        background: #fff; border: 1px solid #dee2e6;
+        border-radius: 0.5rem; box-shadow: 0 6px 16px rgba(0,0,0,.12);
+        display: none;
+      }
+      .search-select-list.show { display: block; }
+      .search-select-item {
+        padding: 0.55rem 0.85rem; cursor: pointer;
+        font-size: 0.875rem; border-bottom: 1px solid #f0f0f0;
+        transition: background 0.15s;
+      }
+      .search-select-item:last-child { border-bottom: none; }
+      .search-select-item:hover, .search-select-item.active { background: #e7f1ff; }
+      .search-select-item .search-doc { font-size: 0.75rem; color: #6c757d; }
+      /* Action dropdown in table */
+      .btn-acciones { border: none; background: transparent; color: #6c757d; font-size: 1.1rem; padding: 0.25rem 0.5rem; border-radius: 0.5rem; transition: all 0.2s; }
+      .btn-acciones:hover { background: #e9ecef; color: #212529; }
+    </style>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="sidebar.js"></script>
+    <script src="tesoreria.js"></script>
+  </body>
+</html>

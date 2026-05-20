@@ -3,6 +3,8 @@ const { jsPDF } = require("jspdf");
 require("jspdf-autotable");
 const fs = require("fs");
 const path = require("path");
+const { createJsPdf } = require("../utils/pdfFormatHelper");
+const { getEmpresaConfig } = require("../config/empresa");
 
 module.exports = {};
 
@@ -287,7 +289,21 @@ const generarPDFDevolucion = async (req, res, next) => {
   try {
     const { id } = req.params; // ID de la devolución
 
-    // 1. Obtener datos de la devolución, la venta original y el cliente.
+    // 1. Obtener datos de la empresa (Centralizado desde DB)
+    const [empresaData] = await pool.query(
+      "SELECT razon_social AS nombre, rif, direccion, telefono, logo_path FROM empresa_datos WHERE id = 1",
+    );
+    const configEstática = getEmpresaConfig();
+    const empresa = empresaData.length > 0 ? empresaData[0] : {
+      nombre: configEstática.nombre,
+      rif: configEstática.rif,
+      direccion: configEstática.direccion,
+      telefono: configEstática.telefono,
+      logo_path: null
+    };
+    empresa.email = configEstática.email;
+
+    // 2. Obtener datos de la devolución, la venta original y el cliente.
     const [devolucionData] = await pool.query(
       `SELECT d.id AS id_devolucion, d.fecha, d.comentario,
               v.id AS id_venta, v.numero_control, v.fecha_venta, v.tasa_bcv,
@@ -306,8 +322,7 @@ const generarPDFDevolucion = async (req, res, next) => {
     }
     const devolucion = devolucionData[0];
 
-    // 2. Obtener los productos devueltos a partir de los movimientos de inventario
-    // y cruzarlos con detalle_ventas para obtener el precio original.
+    // 3. Obtener detalles
     const [detallesDevolucion] = await pool.query(
       `SELECT 
          mi.cantidad,
@@ -321,50 +336,87 @@ const generarPDFDevolucion = async (req, res, next) => {
       [devolucion.id_venta, id],
     );
 
-    // --- INICIALIZACIÓN Y CONFIGURACIÓN DEL DOCUMENTO ---
-    const doc = new jsPDF();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const safeParseFloat = (value) => parseFloat(value) || 0.0;
+    // --- 📄 DECISIÓN DE TAMAÑO ---
+    const itemCount = detallesDevolucion.length;
+    const { doc, pageWidth, pageHeight, isHalfLetter, label } = createJsPdf(itemCount);
+    doc.setProperties({ title: `Devolución - ${label}` });
+    const startX = 0.25;
 
-    // --- ENCABEZADO Y TÍTULO ---
+    // --- LOGO ---
+    let logoBase64;
+    if (empresa.logo_path) {
+      try {
+        const fullLogoPath = path.join(__dirname, "..", empresa.logo_path);
+        if (fs.existsSync(fullLogoPath)) {
+          logoBase64 = fs.readFileSync(fullLogoPath).toString("base64");
+        }
+      } catch (e) {
+        console.error("Error logo Devolución:", e);
+      }
+    }
+
+    // --- ENCABEZADO ESTANDARIZADO ---
+    let currentY = 0.25;
+    if (logoBase64) {
+      doc.addImage(logoBase64, "PNG", startX, currentY, 0.6, 0.6);
+    }
+    
+    let textStartX = logoBase64 ? startX + 0.7 : startX;
+    const maxTextWidth = (pageWidth / 2) - textStartX - 0.1;
+
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("COMPROBANTE DE DEVOLUCIÓN", pageWidth / 2, 25, {
-      align: "center",
-    });
+    doc.setFontSize(12);
+    const nameSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
+    doc.text(nameSplit, textStartX, currentY + 0.15);
+    
+    currentY += 0.15 + (nameSplit.length * 0.15);
 
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text(`RIF: ${empresa.rif}`, textStartX, currentY);
+    
+    currentY += 0.12;
+    const dirSplit = doc.splitTextToSize(`Dir: ${empresa.direccion}`, maxTextWidth);
+    doc.text(dirSplit, textStartX, currentY);
+    
+    currentY += (dirSplit.length * 0.1);
+    doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX, currentY);
+
+    // Título y Número (Derecha) - Movido hacia abajo para evitar superposición
+    const rightBoxWidth = 1.8;
+    const rightBoxX = pageWidth - startX - rightBoxWidth;
+    const rightBoxY = 0.8;
+    
+    doc.setDrawColor(100);
+    doc.setLineWidth(0.01);
+    doc.rect(rightBoxX, rightBoxY, rightBoxWidth, 0.5);
+    
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
+    doc.text("COMPROBANTE DE DEVOLUCIÓN", rightBoxX + rightBoxWidth / 2, rightBoxY + 0.15, { align: "center" });
+    
     doc.setFont("helvetica", "normal");
-    doc.text(`Devolución N°: ${devolucion.id_devolucion}`, 14, 40);
-    doc.text(
-      `Fecha Devolución: ${new Date(devolucion.fecha).toLocaleDateString(
-        "es-VE",
-      )}`,
-      14,
-      46,
-    );
+    doc.setFontSize(8);
+    doc.text(`N°: ${String(devolucion.id_devolucion).padStart(6, "0")}`, rightBoxX + 0.05, rightBoxY + 0.3);
+    doc.text(`Fecha: ${new Date(devolucion.fecha).toLocaleDateString()}`, rightBoxX + 0.05, rightBoxY + 0.4);
 
-    doc.text(`Venta Original N°: ${devolucion.id_venta}`, pageWidth - 70, 40);
-    doc.text(
-      `Fecha Venta: ${new Date(devolucion.fecha_venta).toLocaleDateString(
-        "es-VE",
-      )}`,
-      pageWidth - 70,
-      46,
-    );
+    currentY = Math.max(currentY + 0.2, rightBoxY + 0.6);
 
-    // --- BLOQUE DE CLIENTE ---
+    // --- BLOQUE DE CLIENTE - MEDIA CARTA ---
+    // 🎯 Rectángulo comprimido: X=0.25", Y=1.1", ancho=5", alto=0.5"
     doc.setDrawColor(200);
-    doc.rect(14, 52, pageWidth - 28, 22);
+    doc.rect(0.25, 1.1, pageWidth - 0.5, 0.5);
     doc.setFont("helvetica", "bold");
-    doc.text("CLIENTE:", 18, 58);
+    doc.setFontSize(7); // 🎯 Tamaño pequeño
+    doc.text("CLIENTE:", 0.35, 1.2);
     doc.setFont("helvetica", "normal");
-    doc.text(`${devolucion.razon_social}`, 40, 58);
-    doc.text(`C.I./RIF: ${devolucion.rif_cedula}`, 18, 64);
-    doc.text(`Dirección: ${devolucion.direccion_fiscal || "N/A"}`, 18, 70);
+    doc.setFontSize(6); // Aún más pequeño para datos
+    doc.text(`${devolucion.razon_social}`, 0.8, 1.2);
+    doc.text(`C.I./RIF: ${devolucion.rif_cedula}`, 0.35, 1.32);
+    doc.text(`Dirección: ${devolucion.direccion_fiscal || "N/A"}`, 0.35, 1.44);
 
-    // --- TABLA DE ARTÍCULOS DEVUELTOS ---
+    // --- TABLA DE ARTÍCULOS DEVUELTOS - MEDIA CARTA ---
+    // 🎯 Tabla comprimida con fuentes pequeñas para media carta
     const tableBody = detallesDevolucion.map((d) => [
       d.cantidad,
       d.descripcion,
@@ -372,20 +424,48 @@ const generarPDFDevolucion = async (req, res, next) => {
       `$${safeParseFloat(d.total).toFixed(2)}`,
     ]);
 
+    const availableTableWidth = pageWidth - 0.5;
+    const columnWidthCantidad = 0.45;
+    const columnWidthPrecio = 0.75;
+    const columnWidthSubtotal = 0.75;
+    const columnWidthDescripcion =
+      availableTableWidth -
+      columnWidthCantidad -
+      columnWidthPrecio -
+      columnWidthSubtotal;
+
     doc.autoTable({
-      startY: 78,
-      head: [["Cant. Devuelta", "Descripción", "Precio Unit.", "Subtotal"]],
+      startY: 1.75, // 🎯 Bajo el bloque de cliente
+      head: [["Cant.", "Descripción", "Precio Unit.", "Subtotal"]],
       body: tableBody,
       theme: "grid",
+      tableWidth: availableTableWidth,
       headStyles: {
         fillColor: [220, 53, 69],
         textColor: 255,
         fontStyle: "bold",
+        fontSize: 7,
       },
+      bodyStyles: {
+        fontSize: 6,
+        cellPadding: 0.08,
+        overflow: "linebreak",
+      },
+      columnStyles: {
+        0: { cellWidth: columnWidthCantidad, halign: "center" },
+        1: { cellWidth: columnWidthDescripcion, overflow: "linebreak" },
+        2: { cellWidth: columnWidthPrecio, halign: "right" },
+        3: { cellWidth: columnWidthSubtotal, halign: "right" },
+      },
+      styles: { lineWidth: 0.01, lineColor: [220, 220, 220] },
     });
 
-    // --- BLOQUE DE TOTALES ---
-    let finalY = doc.lastAutoTable.finalY || 80;
+    // --- BLOQUE DE TOTALES - MEDIA CARTA ---
+    // 🎯 Totales comprimidos justo después de la tabla
+    let finalY = doc.lastAutoTable.finalY || 1.8;
+    const finalYAnchor = pageHeight - 0.75;
+    currentY = Math.max(finalY + 0.1, finalYAnchor - 0.6);
+
     const montoTotalDevuelto = detallesDevolucion.reduce(
       (sum, item) => sum + safeParseFloat(item.total),
       0,
@@ -393,49 +473,66 @@ const generarPDFDevolucion = async (req, res, next) => {
     const totalDevueltoBs =
       montoTotalDevuelto * safeParseFloat(devolucion.tasa_bcv);
 
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("MONTO TOTAL A FAVOR DEL CLIENTE:", pageWidth - 95, finalY + 15, {
-      align: "left",
-    });
-    doc.text(`$${montoTotalDevuelto.toFixed(2)}`, pageWidth - 15, finalY + 15, {
-      align: "right",
-    });
+    const labelX = pageWidth - (isHalfLetter ? 2.7 : 3.5);
+    const valueX = pageWidth - 0.25;
 
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      `Equivalente a: ${totalDevueltoBs.toFixed(2)} Bs. (Tasa: ${safeParseFloat(devolucion.tasa_bcv).toFixed(2)})`,
-      pageWidth - 15,
-      finalY + 21,
-      { align: "right" },
+    const drawLabelRightValue = (
+      label,
+      value,
+      y,
+      { lineHeight = 0.18 } = {},
+    ) => {
+      const maxLabelWidth = valueX - labelX - 0.1;
+      const splitLabel = doc.splitTextToSize(label, maxLabelWidth);
+      doc.text(splitLabel, labelX, y);
+      doc.text(value, valueX, y, { align: "right" });
+      return y + lineHeight * splitLabel.length;
+    };
+
+    doc.setFontSize(8); // 🎯 Tamaño pequeño
+    doc.setFont("helvetica", "bold");
+    currentY = drawLabelRightValue(
+      "MONTO TOTAL A FAVOR:",
+      `$${montoTotalDevuelto.toFixed(2)}`,
+      currentY,
     );
 
-    finalY += 25;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    currentY = drawLabelRightValue(
+      "Equivalente a:",
+      `${totalDevueltoBs.toFixed(2)} Bs. (Tasa: ${safeParseFloat(devolucion.tasa_bcv).toFixed(2)})`,
+      currentY,
+      { lineHeight: 0.22 },
+    );
+
+    currentY += 0.22;
 
     // --- MOTIVO Y COMENTARIOS ---
-    doc.setFontSize(9);
+    doc.setFontSize(7); // 🎯 Tamaño pequeño
     doc.setFont("helvetica", "bold");
-    doc.text("Motivo de la Devolución:", 14, finalY + 10);
+    doc.text("Motivo:", 0.25, currentY);
     doc.setFont("helvetica", "normal");
-    doc.text(devolucion.motivo || "No especificado", 55, finalY + 10);
+    doc.text(devolucion.motivo || "No especificado", 0.5, currentY);
 
     if (devolucion.comentario) {
+      currentY += 0.15;
       doc.setFont("helvetica", "italic");
       const splitComentario = doc.splitTextToSize(
         `Comentario: ${devolucion.comentario}`,
-        pageWidth - 28,
+        pageWidth - 0.5,
       );
-      doc.text(splitComentario, 14, finalY + 16);
+      doc.text(splitComentario, 0.25, currentY);
     }
 
-    // --- PIE DE PÁGINA ---
-    doc.setFontSize(8);
+    // --- PIE DE PÁGINA - MEDIA CARTA ---
+    // 🎯 Texto muy pequeño al final
+    doc.setFontSize(6); // 🎯 Muy pequeño
     doc.setFont("helvetica", "italic");
     const footerText =
-      "Este documento certifica la devolución de los artículos listados y el crédito generado a favor del cliente. El ajuste de inventario ha sido procesado.";
-    const splitFooter = doc.splitTextToSize(footerText, pageWidth - 28);
-    doc.text(splitFooter, 14, pageHeight - 20);
+      "Comprobante de devolución y crédito a favor del cliente. Ajuste de inventario procesado.";
+    const splitFooter = doc.splitTextToSize(footerText, pageWidth - 0.4);
+    doc.text(splitFooter, 0.2, pageHeight - 0.25);
 
     // --- ENVIAR PDF ---
     const pdfBuffer = doc.output("arraybuffer");
@@ -488,6 +585,29 @@ const obtenerVentas = async (req, res, next) => {
   }
 };
 
+const verificarEstadoCaja = async (req, res, next) => {
+  try {
+    const [cierreHoy] = await pool.query(
+      "SELECT id, fecha_cierre FROM cierres_diarios WHERE DATE(fecha_cierre) = CURDATE()",
+    );
+
+    if (cierreHoy.length > 0) {
+      res.json({
+        cajaCerrada: true,
+        mensaje: "La caja ya fue cerrada para el día de hoy.",
+        fecha_cierre: cierreHoy[0].fecha_cierre,
+      });
+    } else {
+      res.json({
+        cajaCerrada: false,
+        mensaje: "La caja está abierta.",
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Esta función se encarga de procesar una venta completa.
 // Es una operación "atómica", lo que significa que o todo sale bien, o no se hace nada.
 const procesarVenta = async (req, res, next) => {
@@ -496,6 +616,23 @@ const procesarVenta = async (req, res, next) => {
     "Procesando venta. Body recibido:",
     JSON.stringify(req.body, null, 2),
   );
+
+  // NUEVA VALIDACIÓN: Verificar si la caja ya fue cerrada para el día de hoy.
+  // Esta es la barrera de seguridad principal a nivel de servidor.
+  try {
+    const [cierreHoy] = await pool.query(
+      "SELECT id FROM cierres_diarios WHERE DATE(fecha_cierre) = CURDATE()",
+    );
+
+    if (cierreHoy.length > 0) {
+      return res.status(403).json({
+        message:
+          "La caja ya está cerrada por el día de hoy. No se pueden realizar más ventas.",
+      });
+    }
+  } catch (dbError) {
+    return next(dbError);
+  }
 
   // 2. Estandarizar la extracción de datos del body.
   const {
@@ -636,6 +773,9 @@ const procesarVenta = async (req, res, next) => {
   } catch (error) {
     await connection.rollback();
     console.error("Error en procesarVenta:", error.message);
+    if (error.sql) {
+      console.error("QUERY FALLIDA:", error.sql);
+    }
     // Asignar statusCode para el middleware de errores.
     error.statusCode = error.message.startsWith("Stock insuficiente")
       ? 409
@@ -691,161 +831,126 @@ const generarComprobante = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // 1. Obtener datos de la venta, cliente y pago.
-    // Se asume que v.* trae todos los campos necesarios.
-    const [ventaData] = await pool.query(
-      `SELECT v.id, v.subtotal, v.impuesto, v.total, v.tasa_bcv, v.numero_control, v.fecha_venta, v.monto_flete, c.razon_social, c.rif_cedula, c.direccion_fiscal, c.telefono 
-             FROM ventas v 
-             JOIN clientes c ON v.id_cliente = c.id 
-             WHERE v.id = ?`,
-      [id],
+    // 1. Obtener datos de la empresa (Centralizado desde DB)
+    const [empresaData] = await pool.query(
+      "SELECT razon_social AS nombre, rif, direccion, telefono, logo_path FROM empresa_datos WHERE id = 1",
     );
-
-    if (ventaData.length === 0) {
-      return res.status(404).json({ message: "Venta no encontrada" });
-    }
-    const venta = ventaData[0];
-
-    // 1.1 Obtener los pagos asociados
-    const [pagosData] = await pool.query(
-      "SELECT metodo_pago, monto_pago, referencia FROM venta_pagos WHERE id_venta = ?",
-      [id],
-    );
-
-    // 2. Obtener detalles de la venta, incluyendo la marca del producto.
-    const [detallesVenta] = await pool.query(
-      `SELECT 
-                dv.cantidad, 
-                p.nombre AS descripcion,
-                p.marca,
-                dv.precio_unitario, 
-                (dv.cantidad * dv.precio_unitario) AS total
-             FROM detalle_ventas dv 
-             JOIN productos p ON dv.id_producto = p.id 
-             WHERE dv.id_venta = ?`,
-      [id],
-    );
-
-    // --- INICIALIZACIÓN Y CONFIGURACIÓN DEL DOCUMENTO ---
-    const doc = new jsPDF();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const pageWidth = doc.internal.pageSize.getWidth();
-
-    // --- FUNCIÓN DE UTILIDAD PARA EVITAR NaN ---
-    const safeParseFloat = (value) => {
-      const parsed = parseFloat(value);
-      return isNaN(parsed) ? 0.0 : parsed;
+    const configEstática = getEmpresaConfig();
+    const empresa = empresaData.length > 0 ? empresaData[0] : {
+      nombre: configEstática.nombre,
+      rif: configEstática.rif,
+      direccion: configEstática.direccion,
+      telefono: configEstática.telefono,
+      logo_path: null
     };
+    empresa.email = configEstática.email;
 
-    // --- MANEJO DE IMAGEN (LOGO) ---
+    // --- LOGO ---
     let logoBase64;
-    try {
-      // La ruta es relativa desde la raíz del proyecto backend
-      const logoPath = path.join(
-        __dirname,
-        "..",
-        "..",
-        "Frontend",
-        "img",
-        "logo.PNG",
-      );
-      const logoBuffer = fs.readFileSync(logoPath);
-      logoBase64 = logoBuffer.toString("base64");
-    } catch (error) {
-      console.error("Error al cargar el logo:", error);
-      // No se detiene la ejecución, simplemente no se mostrará el logo.
-    }
-
-    // --- MARCA DE AGUA (CON LOGO) ---
-    if (logoBase64) {
-      const imgProps = doc.getImageProperties(logoBase64);
-      const logoWidth = 120;
-      const logoHeight = (imgProps.height * logoWidth) / imgProps.width;
-      const x = (pageWidth - logoWidth) / 2;
-      const y = (pageHeight - logoHeight) / 2;
-
-      doc.saveGraphicsState();
+    if (empresa.logo_path) {
       try {
-        // El método preferido para la opacidad en jsPDF
-        doc.setGState(new doc.GState({ opacity: 0.06 }));
-        doc.addImage(logoBase64, "PNG", x, y, logoWidth, logoHeight);
+        const fullLogoPath = path.join(__dirname, "..", empresa.logo_path);
+        if (fs.existsSync(fullLogoPath)) {
+          logoBase64 = fs.readFileSync(fullLogoPath).toString("base64");
+        }
       } catch (e) {
-        console.error(
-          "Fallo al aplicar GState para marca de agua. Usando sin opacidad.",
-          e,
-        );
-        doc.addImage(logoBase64, "PNG", x, y, logoWidth, logoHeight);
+        console.error("Error logo Ventas:", e);
       }
-      doc.restoreGraphicsState();
     }
 
-    // --- ENCABEZADO ---
+    // --- ENCABEZADO ESTANDARIZADO ---
+    let currentY = 0.25;
     if (logoBase64) {
-      doc.addImage(logoBase64, "PNG", 14, 10, 30, 30); // Logo visible
+      doc.addImage(logoBase64, "PNG", startX, currentY, 0.6, 0.6);
     }
+    
+    let textStartX = logoBase64 ? startX + 0.7 : startX;
+    const maxTextWidth = (pageWidth / 2) - textStartX - 0.1;
 
-    // Título y Datos de la Empresa
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    const nameSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
+    doc.text(nameSplit, textStartX, currentY + 0.15);
+    
+    currentY += 0.15 + (nameSplit.length * 0.15);
+
+    doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
+    doc.text(`RIF: ${empresa.rif}`, textStartX, currentY);
+    
+    currentY += 0.12;
+    const dirSplit = doc.splitTextToSize(`Dir: ${empresa.direccion}`, maxTextWidth);
+    doc.text(dirSplit, textStartX, currentY);
+    
+    currentY += (dirSplit.length * 0.1);
+    doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX, currentY);
+
+    // Título y Control (Derecha) - Movido hacia abajo para evitar superposición
+    const rightBoxWidth = 1.8;
+    const rightBoxX = pageWidth - startX - rightBoxWidth;
+    const rightBoxY = 0.8;
+    
+    doc.setDrawColor(100);
+    doc.setLineWidth(0.01);
+    doc.rect(rightBoxX, rightBoxY, rightBoxWidth, 0.5);
+    
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.text("FERRETERIA XYZ, C.A.", 48, 18);
-    doc.text("RIF: J-12345678-9", 48, 24);
-    doc.text("Av. Principal, Local 1, Ciudad, Estado", 48, 30);
-    doc.text("Teléfono: 0212-1234567", 48, 36);
-
-    // Título Principal
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("NOTA DE ENTREGA", pageWidth / 1.5, 20, { align: "center" });
-
-    // Datos de Control
-    doc.setFontSize(10);
-    doc.text(`N° Control:`, pageWidth - 60, 30);
+    doc.text("ORDEN DE DESPACHO", rightBoxX + rightBoxWidth / 2, rightBoxY + 0.15, { align: "center" });
+    
     doc.setFont("helvetica", "normal");
-    doc.text(`${venta.numero_control || "S/N"}`, pageWidth - 35, 30);
+    doc.setFontSize(8);
+    doc.text(`N° Control: ${venta.numero_control || "S/N"}`, rightBoxX + 0.05, rightBoxY + 0.3);
+    doc.text(`Fecha: ${new Date(venta.fecha_venta).toLocaleDateString()}`, rightBoxX + 0.05, rightBoxY + 0.4);
 
+    currentY = Math.max(currentY + 0.2, rightBoxY + 0.6);
+
+    // 2. Cuadrícula de Cliente y Pago (2 Columnas con Bordes)
+    const boxHeight = 0.8;
+    doc.setDrawColor(100);
+    doc.setLineWidth(0.01);
+    doc.rect(startX, currentY, pageWidth - 2 * startX, boxHeight);
+    
+    const midX = pageWidth / 2;
+    doc.line(midX, currentY, midX, currentY + boxHeight);
+    
+    const col1X = startX + 0.05;
+    const col2X = midX + 0.05;
+    let innerY = currentY + 0.15;
+    
     doc.setFont("helvetica", "bold");
-    doc.text(`Fecha:`, pageWidth - 60, 36);
+    doc.setFontSize(8);
+    doc.text("CLIENTE", col1X, innerY);
+    doc.text("DATOS DE PAGO", col2X, innerY);
+    
+    innerY += 0.15;
+    
     doc.setFont("helvetica", "normal");
-    doc.text(
-      `${new Date(venta.fecha_venta).toLocaleDateString()}`,
-      pageWidth - 42,
-      36,
-    );
+    const nombreSplit = doc.splitTextToSize(`Nombre: ${venta.razon_social}`, midX - startX - 0.1);
+    doc.text(nombreSplit, col1X, innerY);
+    
+    const metodos = pagosData.map(p => p.metodo_pago).join(', ');
+    const referencias = pagosData.filter(p => p.referencia).map(p => p.referencia).join(', ') || 'N/A';
+    doc.text(`Método: ${metodos}`, col2X, innerY);
+    
+    innerY += (nombreSplit.length * 0.12);
+    doc.text(`CI/RIF: ${venta.rif_cedula}`, col1X, innerY);
+    doc.text(`Tasa BCV: ${safeParseFloat(venta.tasa_bcv).toFixed(2)} Bs`, col2X, innerY);
+    
+    innerY += 0.15;
+    doc.text(`Teléfono: ${venta.telefono || "N/A"}`, col1X, innerY);
+    
+    innerY += 0.15;
+    const addrSplit = doc.splitTextToSize(`Dirección: ${venta.direccion_fiscal || "N/A"}`, midX - startX - 0.1);
+    doc.text(addrSplit, col1X, innerY);
 
-    // --- BLOQUE DE CLIENTE Y PAGO ---
-    doc.setDrawColor(200);
-    doc.rect(14, 48, pageWidth - 28, 25);
+    doc.text(`Referencia: ${referencias}`, col2X, innerY);
 
-    doc.setFont("helvetica", "bold");
-    doc.text("CLIENTE", 18, 54);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Razón Social: ${venta.razon_social}`, 18, 60);
-    doc.text(`Cédula/RIF: ${venta.rif_cedula}`, 18, 66);
-    doc.text(`Dirección: ${venta.direccion_fiscal || "N/A"}`, 18, 72);
+    currentY += boxHeight + 0.15; // Espacio antes de tabla
 
-    doc.setFont("helvetica", "bold");
-    doc.text("MÉTODO DE PAGO", pageWidth / 2, 54);
-    doc.setFont("helvetica", "normal");
-
-    // Listar pagos combinados
-    let yPago = 60;
-    pagosData.forEach((p) => {
-      const texto = `${p.metodo_pago}: $${safeParseFloat(p.monto_pago).toFixed(2)} ${p.referencia ? "(Ref: " + p.referencia + ")" : ""}`;
-      doc.text(texto, pageWidth / 2, yPago);
-      yPago += 6;
-    });
-
-    // Ajustar si hay muchos pagos para no solapar (simple fallback)
-    if (yPago > 78) {
-      // En un caso real, ajustaríamos startY de la tabla dinámicamente
-    }
-
-    // --- TABLA DE ARTÍCULOS ---
+    // 5. Ajuste de Tabla de Artículos
     const tableBody = detallesVenta.map((d) => {
-      // Estrategia de Diseño: se concatena la marca a la descripción si esta existe.
-      const descripcionConMarca = d.marca
-        ? `${d.descripcion} [Marca: ${d.marca}]`
-        : d.descripcion;
+      const descripcionConMarca = d.marca ? `${d.descripcion} [${d.marca}]` : d.descripcion;
       return [
         d.cantidad,
         descripcionConMarca,
@@ -854,115 +959,94 @@ const generarComprobante = async (req, res, next) => {
       ];
     });
 
+    const col0w = 0.5; // Cantidad
+    const col2w = 0.8; // Precio Unit.
+    const col3w = 0.8; // Total
+    const col1w = (pageWidth - 2 * startX) - col0w - col2w - col3w; // Descripción (residual)
+
     doc.autoTable({
-      startY: 78,
+      startY: currentY,
       head: [["Cant.", "Descripción", "Precio Unit.", "Total"]],
       body: tableBody,
       theme: "grid",
+      margin: { left: startX, right: startX },
       headStyles: {
-        fillColor: [0, 128, 128], // Verde azulado
+        fillColor: [0, 92, 168],
         textColor: 255,
         fontStyle: "bold",
+        fontSize: 8,
       },
-      styles: {
-        lineWidth: 0.1,
-        lineColor: [200, 200, 200],
+      bodyStyles: {
+        fontSize: 7,
+        cellPadding: 0.05, // Espaciado compacto
       },
+      columnStyles: {
+        0: { cellWidth: col0w, halign: "center" },
+        1: { cellWidth: col1w, overflow: "linebreak" },
+        2: { cellWidth: col2w, halign: "right" },
+        3: { cellWidth: col3w, halign: "right" },
+      },
+      styles: { lineWidth: 0.01, lineColor: [200, 200, 200] },
+      alternateRowStyles: { fillColor: [245, 248, 255] },
     });
 
-    // --- BLOQUE DE TOTALES ---
-    const finalYAnchor = pageHeight - 35;
-    let currentY = finalYAnchor;
+    currentY = doc.lastAutoTable.finalY + 0.2;
 
-    if (doc.lastAutoTable.finalY > finalYAnchor - 40) {
+    // Verificar si queda espacio para los totales y el footer
+    if (currentY > pageHeight - 1.5) {
       doc.addPage();
-      currentY = 40;
-    } else {
-      currentY = Math.max(doc.lastAutoTable.finalY + 8, finalYAnchor - 40);
+      currentY = 0.5;
     }
 
-    const totalXAlign = pageWidth - 65;
-    const valueXAlign = pageWidth - 15;
+    // 3. Sección de Totales (Interlineado Reducido)
+    const lblX = 3.8;
+    const valX = 5.2;
+    const lineH = 0.15; // Decremento estricto de interlineado
 
-    doc.setFontSize(10);
+    doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
-
-    doc.text("Subtotal:", totalXAlign, currentY, { align: "left" });
-    doc.text(
-      `$${safeParseFloat(venta.subtotal).toFixed(2)}`,
-      valueXAlign,
-      currentY,
-      { align: "right" },
-    );
-    currentY += 6;
+    
+    doc.text("SUBTOTAL:", lblX, currentY);
+    doc.text(`$${safeParseFloat(venta.subtotal).toFixed(2)}`, valX, currentY, { align: "right" });
+    currentY += lineH;
 
     if (venta.monto_flete > 0) {
-      doc.text("Flete:", totalXAlign, currentY, { align: "left" });
-      doc.text(
-        `$${safeParseFloat(venta.monto_flete).toFixed(2)}`,
-        valueXAlign,
-        currentY,
-        { align: "right" },
-      );
-      currentY += 6;
+      doc.text("FLETE:", lblX, currentY);
+      doc.text(`$${safeParseFloat(venta.monto_flete).toFixed(2)}`, valX, currentY, { align: "right" });
+      currentY += lineH;
     }
 
-    doc.text("IVA (16%):", totalXAlign, currentY, { align: "left" });
-    doc.text(
-      `$${safeParseFloat(venta.impuesto).toFixed(2)}`,
-      valueXAlign,
-      currentY,
-      { align: "right" },
-    );
-    currentY += 10;
-
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-
-    doc.text("TOTAL A PAGAR:", totalXAlign, currentY, { align: "left" });
-    doc.text(
-      `$${safeParseFloat(venta.total).toFixed(2)}`,
-      valueXAlign,
-      currentY,
-      { align: "right" },
-    );
-    currentY += 8;
+    doc.text("IVA (16%):", lblX, currentY);
+    doc.text(`$${safeParseFloat(venta.impuesto).toFixed(2)}`, valX, currentY, { align: "right" });
+    currentY += lineH;
 
     doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
+    doc.setFont("helvetica", "bold");
+    doc.text("TOTAL:", lblX, currentY);
+    doc.text(`$${safeParseFloat(venta.total).toFixed(2)}`, valX, currentY, { align: "right" });
+    currentY += lineH;
 
-    const totalBolivares =
-      safeParseFloat(venta.total) * safeParseFloat(venta.tasa_bcv);
-    doc.text("Total en Bolívares:", totalXAlign, currentY, { align: "left" });
-    doc.text(`${totalBolivares.toFixed(2)} Bs.`, valueXAlign, currentY, {
-      align: "right",
-    });
-    currentY += 6;
-
-    doc.setTextColor(100);
-    doc.text(
-      `Tasa $ Aplicada: ${safeParseFloat(venta.tasa_bcv).toFixed(2)} Bs.`,
-      totalXAlign,
-      currentY,
-      { align: "left" },
-    );
-    doc.setTextColor(0);
-
-    // --- PIE DE PÁGINA ---
     doc.setFontSize(8);
-    doc.setFont("helvetica", "italic");
-    const footerText =
-      "CONDICIONES DE DEVOLUCIÓN: Los cambios o devoluciones se procesan únicamente por defectos de fábrica dentro de los primeros 5 días hábiles tras la compra. Es indispensable presentar esta factura original y el producto en su empaque original sin daños físicos.";
-    const splitFooter = doc.splitTextToSize(footerText, pageWidth - 28);
-    doc.text(splitFooter, 14, pageHeight - 20);
+    doc.setFont("helvetica", "normal");
+    const totalBolivares = safeParseFloat(venta.total) * safeParseFloat(venta.tasa_bcv);
+    doc.text("TOTAL EN BS:", lblX, currentY);
+    doc.text(`${totalBolivares.toFixed(2)} Bs.`, valX, currentY, { align: "right" });
+    
+    // 4. Pie de Página Dinámico (Anclado al final de totales)
+    currentY += 0.3;
 
-    // --- ENVIAR PDF ---
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "italic");
+    const footerText = "CONDICIONES: Cambios o devoluciones por defectos de fábrica dentro de 5 días hábiles. Presenta este comprobante original. ¡Gracias por su compra!";
+    const splitFooter = doc.splitTextToSize(footerText, pageWidth - 2 * startX);
+    doc.text(splitFooter, startX, currentY);
+
+    // Enviar PDF al cliente
     const pdfBuffer = doc.output("arraybuffer");
     res.contentType("application/pdf");
     res.send(Buffer.from(pdfBuffer));
   } catch (error) {
-    // Asegurarse de llamar a next para el manejo de errores de Express
-    console.error("Error al generar el reporte PDF:", error);
+    console.error("Error al generar el presupuesto PDF:", error);
     next(error);
   }
 };
@@ -1084,6 +1168,96 @@ const generarCierreZ = async (req, res, next) => {
   }
 };
 
+/**
+ * @function obtenerHistorialCierres
+ * Devuelve el historial de todos los cierres Z realizados,
+ * incluyendo los datos del usuario que los ejecutó.
+ */
+const obtenerHistorialCierres = async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        cd.id,
+        DATE_FORMAT(cd.fecha_cierre, '%Y-%m-%d') AS fecha,
+        TIME_FORMAT(cd.fecha_cierre, '%H:%i:%s') AS hora,
+        cd.ingresos_totales,
+        cd.costo_mercancia,
+        cd.utilidad_neta,
+        u.nombre AS usuario_cierre
+      FROM cierres_diarios cd
+      LEFT JOIN usuarios u ON cd.usuario_id = u.id
+      ORDER BY cd.fecha_cierre DESC
+    `);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @function obtenerDetalleCierre
+ * Devuelve el desglose de pagos y resumen de un cierre específico por ID.
+ */
+const obtenerDetalleCierre = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Datos del cierre
+    const [cierreRows] = await pool.query(
+      `
+      SELECT 
+        cd.id,
+        DATE_FORMAT(cd.fecha_cierre, '%Y-%m-%d %H:%i:%s') AS fecha_cierre,
+        cd.ingresos_totales,
+        cd.costo_mercancia,
+        cd.utilidad_neta,
+        u.nombre AS usuario_cierre
+      FROM cierres_diarios cd
+      LEFT JOIN usuarios u ON cd.usuario_id = u.id
+      WHERE cd.id = ?
+    `,
+      [id],
+    );
+
+    if (cierreRows.length === 0) {
+      return res.status(404).json({ message: "Cierre no encontrado" });
+    }
+
+    // Desglose de pagos para ese cierre (ventas asociadas al cierre)
+    const [desglosePagos] = await pool.query(
+      `
+      SELECT vp.metodo_pago, IFNULL(SUM(vp.monto_pago), 0) AS total, COUNT(DISTINCT v.id) AS num_ventas
+      FROM ventas v
+      JOIN venta_pagos vp ON v.id = vp.id_venta
+      WHERE v.id_cierre_diario = ?
+      GROUP BY vp.metodo_pago
+      ORDER BY total DESC
+    `,
+      [id],
+    );
+
+    // Ventas incluidas en ese cierre
+    const [ventas] = await pool.query(
+      `
+      SELECT v.id, v.numero_control, v.total, DATE_FORMAT(v.fecha_venta, '%H:%i') AS hora, c.razon_social AS cliente
+      FROM ventas v
+      LEFT JOIN clientes c ON v.id_cliente = c.id
+      WHERE v.id_cierre_diario = ?
+      ORDER BY v.fecha_venta ASC
+    `,
+      [id],
+    );
+
+    res.json({
+      cierre: cierreRows[0],
+      desglose_pagos: desglosePagos,
+      ventas,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   procesarVenta,
   obtenerUltimaTasa,
@@ -1096,8 +1270,11 @@ module.exports = {
   generarPDFDevolucion,
   anularVenta,
   getSaleDetails,
-  obtenerReporteX, // Añadido para el control de caja
-  generarCierreZ, // Añadido para el control de caja
+  obtenerReporteX,
+  generarCierreZ,
   obtenerDetallesVenta,
-  generarReporteDevolucion: generarPDFDevolucion, // Alias para cumplir con la ruta solicitada reutilizando la lógica existente
+  generarReporteDevolucion: generarPDFDevolucion,
+  verificarEstadoCaja,
+  obtenerHistorialCierres, // NUEVO: Historial de cierres
+  obtenerDetalleCierre, // NUEVO: Detalle de un cierre específico
 };

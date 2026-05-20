@@ -17,10 +17,12 @@
       href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css"
     />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- theme.js debe cargarse ANTES de styles.css para evitar FOUC -->
+    <script src="theme.js"></script>
     <link rel="stylesheet" href="styles.css" />
     <script src="auth.js"></script>
   </head>
-  <body class="bg-light">
+  <body>
     <div id="wrapper">
       <!-- Contenedor para el sidebar dinámico -->
       <div id="sidebar-container"></div>
@@ -29,65 +31,283 @@
       <div id="page-content-wrapper">
         <div class="container-fluid content-offset">
           <main>
-            <div id="welcome-container">
-              <h2 id="welcome-message" class="mb-1">Cargando...</h2>
-              <p id="user-role-display" class="text-muted"></p>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div id="welcome-container">
+                <h5 id="welcome-message" class="mb-0 fw-bold">Bienvenido</h5>
+                <small id="user-role-display" class="text-muted"></small>
+              </div>
+              <div class="date-display text-muted small">
+                <i class="fas fa-calendar-alt me-1"></i>
+                <span id="currentDate"></span>
+              </div>
             </div>
 
-            <div class="row">
-              <div class="col-md-4">
-                <div class="card border-danger mb-3">
-                  <div class="card-header bg-danger text-white">
-                    Stock Crítico
+            <!-- Fila 1: KPIs (Compactos) -->
+            <div class="row g-3 mb-3">
+              <div class="col-6 col-xl-3">
+                <div class="card border-0 shadow-sm h-100">
+                  <div class="card-body p-2 d-flex align-items-center">
+                    <div
+                      class="rounded-circle bg-primary bg-opacity-10 p-3 me-3 text-primary"
+                    >
+                      <i class="fas fa-cash-register fa-lg"></i>
+                    </div>
+                    <div>
+                      <h6 class="card-subtitle text-muted small">
+                        Ventas del Día
+                      </h6>
+                      <h5 class="card-title mb-0 fw-bold" id="kpi-ventas-dia">
+                        $0.00
+                      </h5>
+                    </div>
                   </div>
-                  <div class="card-body">
-                    <h5 class="card-title" id="cant-critica">Cargando...</h5>
-                    <p class="card-text">Productos por debajo del mínimo.</p>
+                </div>
+              </div>
+              <div class="col-6 col-xl-3">
+                <div class="card border-0 shadow-sm h-100">
+                  <div class="card-body p-2 d-flex align-items-center">
+                    <div
+                      class="rounded-circle bg-success bg-opacity-10 p-3 me-3 text-success"
+                    >
+                      <i class="fas fa-chart-line fa-lg"></i>
+                    </div>
+                    <div>
+                      <h6 class="card-subtitle text-muted small">
+                        Ganancia Est.
+                      </h6>
+                      <h5 class="card-title mb-0 fw-bold" id="kpi-ganancias">
+                        $0.00
+                      </h5>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-xl-3">
+                <div class="card border-0 shadow-sm h-100">
+                  <div class="card-body p-2 d-flex align-items-center">
+                    <div
+                      class="rounded-circle bg-warning bg-opacity-10 p-3 me-3 text-warning"
+                    >
+                      <i class="fas fa-shopping-bag fa-lg"></i>
+                    </div>
+                    <div>
+                      <h6 class="card-subtitle text-muted small">
+                        Transacciones
+                      </h6>
+                      <h5
+                        class="card-title mb-0 fw-bold"
+                        id="kpi-transacciones"
+                      >
+                        -
+                      </h5>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-xl-3">
+                <div class="card border-0 shadow-sm h-100">
+                  <div class="card-body p-2 d-flex align-items-center">
+                    <div
+                      class="rounded-circle bg-danger bg-opacity-10 p-3 me-3 text-danger"
+                    >
+                      <i class="fas fa-exclamation-triangle fa-lg"></i>
+                    </div>
+                    <div>
+                      <h6 class="card-subtitle text-muted small">
+                        Producto Top
+                      </h6>
+                      <h5
+                        class="card-title mb-0 fw-bold text-truncate"
+                        style="max-width: 140px"
+                        id="kpi-top-producto"
+                      >
+                        -
+                      </h5>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="row mt-4">
-              <div class="col-md-8">
-                <div class="card shadow">
-                  <div class="card-body">
-                    <h5 class="card-title">Resumen de Ventas por Método</h5>
-                    <canvas id="graficoVentas"></canvas>
+            <!-- Fila 2: Gráficos Principales -->
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                  <div class="card-header bg-white border-0 py-2">
+                    <h6 class="mb-0 fw-bold">
+                      <i class="fas fa-chart-pie me-2 text-primary"></i
+                      >Ganancias por Categoría
+                    </h6>
+                  </div>
+                  <div
+                    class="card-body p-2 position-relative"
+                    id="container-ganancias"
+                  >
+                    <canvas
+                      id="graficoGananciasPorCategoria"
+                      style="max-height: 220px"
+                    ></canvas>
+                    <div
+                      id="empty-ganancias"
+                      class="d-none text-center position-absolute top-50 start-50 translate-middle w-100"
+                    >
+                      <i
+                        class="fas fa-chart-pie fa-3x text-muted mb-2 opacity-25"
+                      ></i>
+                      <p class="text-muted small">
+                        📉 Aún no hay ventas registradas para generar este
+                        gráfico.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                  <div class="card-header bg-white border-0 py-2">
+                    <h6 class="mb-0 fw-bold">
+                      <i class="fas fa-chart-line me-2 text-success"></i
+                      >Tendencia de Ventas (7 días)
+                    </h6>
+                  </div>
+                  <div
+                    class="card-body p-2 position-relative"
+                    id="container-tendencia"
+                  >
+                    <canvas
+                      id="graficoTendencia"
+                      style="max-height: 220px"
+                    ></canvas>
+                    <div
+                      id="empty-tendencia"
+                      class="d-none text-center position-absolute top-50 start-50 translate-middle w-100"
+                    >
+                      <i
+                        class="fas fa-chart-bar fa-3x text-muted mb-2 opacity-25"
+                      ></i>
+                      <p class="text-muted small">
+                        No hay datos de tendencia disponibles.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="row mt-4">
-              <div class="col-md-8">
-                <div class="card shadow">
-                  <div class="card-body">
-                    <h5 class="card-title">Ganancias por Categoría</h5>
-                    <canvas id="graficoGananciasPorCategoria"></canvas>
+            <!-- Fila 3: Resumen de Turno y Rendimiento -->
+            <div class="row g-3 mb-3">
+              <!-- Estado de Caja -->
+              <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100 rounded-4">
+                  <div class="card-header bg-white border-0 py-3 d-flex align-items-center rounded-top-4">
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-2 me-3 text-primary d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                      <i class="fas fa-cash-register"></i>
+                    </div>
+                    <h6 class="mb-0 fw-bold">Estado de Caja (Turno Actual)</h6>
+                  </div>
+                <div class="card-body pt-0 pb-4 px-4" id="caja-turno-container">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted"><i class="fas fa-coins me-2 text-warning"></i>Fondo Inicial</span>
+                        <span class="fw-semibold" id="caja-fondo-inicial">$100.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted"><i class="fas fa-arrow-up me-2 text-success"></i>Total Ventas</span>
+                        <span class="fw-semibold text-success" id="caja-total-ventas">+$0.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-3 pb-3 border-bottom">
+                        <span class="text-muted"><i class="fas fa-arrow-down me-2 text-danger"></i>Salidas / Egresos</span>
+                        <span class="fw-semibold text-danger" id="caja-total-egresos">-$0.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <span class="text-uppercase fw-bold text-muted small">Saldo Esperado</span>
+                        <h3 class="mb-0 fw-bold text-primary" id="caja-saldo-esperado">$0.00</h3>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Rendimiento de Vendedores -->
+              <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100 rounded-4">
+                  <div class="card-header bg-white border-0 py-3 d-flex align-items-center rounded-top-4">
+                    <div class="rounded-circle bg-warning bg-opacity-10 p-2 me-3 text-warning d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                      <i class="fas fa-trophy"></i>
+                    </div>
+                    <h6 class="mb-0 fw-bold">Rendimiento de Vendedores</h6>
+                  </div>
+                  <div class="card-body pt-0 px-4 pb-3" id="vendedores-container">
+                    <div class="text-center py-4">
+                      <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
+                      <p class="text-muted small mb-0 mt-2">Cargando rendimiento...</p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="row mt-5 pb-5">
-              <div class="col-12">
-                <div class="card shadow">
-                  <div class="card-header bg-dark text-white">
-                    Lista de Productos en Alerta
+            <!-- Fila 4: Alertas de Stock -->
+            <div class="row g-3 pb-4">
+              <div class="col-md-6">
+                <div class="card border-0 shadow-sm">
+                  <div
+                    class="card-header bg-white border-0 py-2 d-flex justify-content-between align-items-center"
+                  >
+                    <h6 class="mb-0 fw-bold text-danger">
+                      <i class="fas fa-exclamation-triangle me-2"></i>Stock Crítico
+                    </h6>
+                    <span
+                      class="badge bg-danger rounded-pill"
+                      id="badge-critico-count"
+                      >0</span
+                    >
                   </div>
-                  <div class="card-body">
-                    <table class="table table-hover">
-                      <thead class="table-light">
-                        <tr>
-                          <th>Producto</th>
-                          <th>Stock Actual</th>
-                          <th>Mínimo Requerido</th>
-                          <th>Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody id="tabla-criticos"></tbody>
-                    </table>
+                  <div class="card-body p-0">
+                    <div class="table-responsive" id="container-criticos-table">
+                      <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small text-muted">
+                          <tr>
+                            <th class="ps-4">Producto</th>
+                            <th>Stock Actual</th>
+                            <th>Mínimo</th>
+                            <th>Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody id="tabla-criticos" class="border-top-0"></tbody>
+                      </table>
+                    </div>
+                    <div id="empty-criticos" class="d-none text-center py-4">
+                      <i class="fas fa-check-circle fa-2x text-success opacity-25 mb-2"></i>
+                      <p class="text-success small mb-0">¡Todo el stock está por encima del mínimo!</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="card border-0 shadow-sm">
+                  <div class="card-header bg-white border-0 py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-primary">
+                      <i class="fas fa-fire me-2"></i>Top Rotación (Más Vendidos)
+                    </h6>
+                  </div>
+                  <div class="card-body p-0">
+                    <div class="table-responsive">
+                      <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small text-muted">
+                          <tr>
+                            <th class="ps-4">Producto</th>
+                            <th>Vendidos</th>
+                            <th>Total ($)</th>
+                          </tr>
+                        </thead>
+                        <tbody id="tabla-mas-vendidos">
+                           <!-- Se llena desde JS -->
+                        </tbody>
+                      </table>
+                    </div>
+                    <div id="empty-mas-vendidos" class="d-none text-center py-4">
+                      <i class="fas fa-box-open fa-2x text-muted opacity-25 mb-2"></i>
+                      <p class="text-muted small mb-0">Aún no hay rotación este mes.</p>
+                    </div>
                   </div>
                 </div>
               </div>

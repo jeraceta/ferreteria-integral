@@ -16,86 +16,30 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css"
     />
+    <script src="theme.js"></script>
     <link rel="stylesheet" href="styles.css" />
     <script src="auth.js"></script>
     <style>
-      /* Cuando el modo cliente está activo en el body */
       body.modo-cliente-activo .columna-acciones,
-      body.modo-cliente-activo #btnNuevoProducto {
+      body.modo-cliente-activo #btnNuevoProducto,
+      body.modo-cliente-activo #btnImportarExcel {
         display: none;
+      }
+      .badge-ubicacion {
+        font-size: 0.75rem;
+        background: #e8f4ff;
+        color: #0d6efd;
+        border: 1px solid #b6d4fe;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-family: monospace;
+        font-weight: 600;
       }
     </style>
   </head>
   <body class="bg-light">
     <div id="wrapper">
-      <!-- Sidebar -->
-      <nav id="sidebar" class="sidebar">
-        <div class="sidebar-heading">
-          <div class="logo-container">
-            <img src="img/logo.png" alt="Logo" />
-          </div>
-        </div>
-        <div class="list-group list-group-flush">
-          <a
-            href="dashboard.html"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-home me-2"></i>Dashboard
-          </a>
-          <a
-            href="inventario.html"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-boxes me-2"></i>Inventario
-          </a>
-          <a
-            href="#ventasSubmenu"
-            data-bs-toggle="collapse"
-            class="list-group-item list-group-item-action ventas-dropdown-toggle"
-          >
-            <i class="fas fa-shopping-cart me-2"></i>Ventas
-            <i class="fas fa-chevron-down float-end"></i>
-          </a>
-          <div class="collapse" id="ventasSubmenu">
-            <a
-              href="ventas.html"
-              class="list-group-item list-group-item-action sub-item"
-              ><i class="fas fa-cash-register me-2"></i>Facturación</a
-            >
-            <a
-              href="gestion-ventas.html"
-              class="list-group-item list-group-item-action sub-item"
-              ><i class="fas fa-history me-2"></i>Historial y Devoluciones</a
-            >
-            <a
-              href="caja.html"
-              class="list-group-item list-group-item-action sub-item"
-              ><i class="fas fa-cash-register me-2"></i>Cierre de Caja</a
-            >
-          </div>
-          <a
-            href="clientes.html"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-users me-2"></i>Clientes
-          </a>
-          <a
-            href="productos.html"
-            class="list-group-item list-group-item-action active"
-          >
-            <i class="fas fa-box me-2"></i>Productos
-          </a>
-          <a
-            href="usuarios.html"
-            id="nav-usuarios"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-user-cog me-2"></i>Gestión de Usuarios
-          </a>
-        </div>
-      </nav>
-
-      <!-- Page Content -->
+      <div id="sidebar-container"></div>
       <div id="page-content-wrapper">
         <div class="container-fluid content-offset">
           <main>
@@ -103,20 +47,33 @@
 
             <div class="card shadow-sm mb-4">
               <div
-                class="card-header bg-primary text-white d-flex justify-content-between align-items-center"
+                class="card-header bg-primary text-white d-flex justify-content-between align-items-center flex-wrap gap-2"
               >
-                <span class="me-auto">Listado de Productos</span>
-                <div class="form-check form-switch me-3">
+                <span class="me-auto fw-bold"
+                  ><i class="fas fa-boxes me-2"></i>Listado de Productos</span
+                >
+                <div class="form-check form-switch me-2 mb-0">
                   <input
                     class="form-check-input"
                     type="checkbox"
                     role="switch"
                     id="modoClienteSwitch"
                   />
-                  <label class="form-check-label" for="modoClienteSwitch"
+                  <label
+                    class="form-check-label text-white"
+                    for="modoClienteSwitch"
                     >Modo Cliente</label
                   >
                 </div>
+                <!-- Botón Importar Excel -->
+                <button
+                  type="button"
+                  class="btn btn-warning btn-sm"
+                  id="btnImportarExcel"
+                >
+                  <i class="fas fa-file-excel me-1"></i>Importar Excel
+                </button>
+                <!-- Botón Nuevo Producto -->
                 <button
                   type="button"
                   class="btn btn-light btn-sm"
@@ -124,7 +81,7 @@
                   data-bs-target="#modalProducto"
                   id="btnNuevoProducto"
                 >
-                  Nuevo Producto
+                  <i class="fas fa-plus me-1"></i>Nuevo Producto
                 </button>
               </div>
               <div class="card-body">
@@ -133,28 +90,26 @@
                     type="text"
                     class="form-control"
                     id="inputBuscarProducto"
-                    placeholder="Buscar por Nombre o Categoría..."
+                    placeholder="Buscar por Nombre, Código, Marca o Ubicación..."
                   />
                 </div>
                 <div class="table-responsive">
                   <table class="table table-hover table-striped">
                     <thead class="table-dark">
                       <tr>
-                        <th>ID</th>
                         <th>Código</th>
                         <th>Nombre</th>
                         <th>Marca</th>
-                        <th>Descripción</th>
                         <th>Categoría</th>
+                        <th>Ubicación</th>
                         <th>Precio Venta</th>
-                        <th>Stock Actual</th>
+                        <th>Stock</th>
                         <th class="columna-acciones">Acciones</th>
                       </tr>
                     </thead>
                     <tbody id="tablaProductos">
-                      <!-- Aquí se cargarán los productos -->
                       <tr>
-                        <td colspan="9" class="text-center">
+                        <td colspan="8" class="text-center">
                           Cargando productos...
                         </td>
                       </tr>
@@ -164,7 +119,7 @@
               </div>
             </div>
 
-            <!-- Modal Producto -->
+            <!-- ==================== MODAL CREAR / EDITAR PRODUCTO ==================== -->
             <div
               class="modal fade"
               id="modalProducto"
@@ -183,7 +138,6 @@
                       type="button"
                       class="btn-close btn-close-white"
                       data-bs-dismiss="modal"
-                      aria-label="Close"
                     ></button>
                   </div>
                   <div
@@ -195,21 +149,22 @@
 
                       <!-- Fila 1: Código, Nombre, Marca -->
                       <div class="row mb-2">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                           <label for="codigo" class="form-label mb-1"
-                            >Código</label
+                            >Código *</label
                           >
+                          <!-- 🔒 CAMPO INMUTABLE: El código nunca se puede cambiar para mantener la integridad de la BD -->
                           <input
                             type="text"
                             class="form-control form-control-sm"
                             id="codigo"
-                            required
-                            autocomplete="off"
+                            readonly
+                            title="El código no se puede modificar para mantener la integridad de los datos"
                           />
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-5">
                           <label for="nombre" class="form-label mb-1"
-                            >Nombre</label
+                            >Nombre *</label
                           >
                           <input
                             type="text"
@@ -233,11 +188,11 @@
                         </div>
                       </div>
 
-                      <!-- Fila 2: Categoría, Stock -->
+                      <!-- Fila 2: Categoría, Ubicación, Stock, Stock Mínimo -->
                       <div class="row mb-2">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                           <label for="selectCategoria" class="form-label mb-1"
-                            >Categoría</label
+                            >Categoría *</label
                           >
                           <div class="input-group input-group-sm">
                             <select
@@ -245,30 +200,47 @@
                               id="selectCategoria"
                               required
                             >
-                              <option value="">Seleccione una categoría</option>
-                              <!-- Opciones se cargarán aquí -->
+                              <option value="">Seleccione categoría</option>
                             </select>
                             <button
                               class="btn btn-success"
                               type="button"
                               id="btnAnadirCategoria"
-                              title="Añadir nueva categoría"
+                              title="Nueva categoría"
                             >
                               +
                             </button>
                           </div>
                         </div>
+                        <!-- ★ CAMPO NUEVO: Ubicación en el estante -->
                         <div class="col-md-3">
+                          <label for="ubicacion" class="form-label mb-1">
+                            <i
+                              class="fas fa-map-marker-alt text-primary me-1"
+                            ></i
+                            >Ubicación
+                          </label>
+                          <input
+                            type="text"
+                            class="form-control form-control-sm"
+                            id="ubicacion"
+                            placeholder="Ej: P1-E3-T2"
+                            autocomplete="off"
+                            title="Pasillo-Estante-Tablero. Ej: P1-E3-T2"
+                          />
+                        </div>
+                        <div class="col-md-2">
                           <label for="stockActual" class="form-label mb-1"
-                            >Stock Actual</label
+                            >Stock Actual *</label
                           >
+                          <!-- 🚫 CAMPO BLOQUEADO: El stock nunca se edita aquí, solo en Ajuste de Inventario -->
                           <input
                             type="number"
-                            class="form-control form-control-sm"
+                            class="form-control form-control-sm campo-stock"
                             id="stockActual"
                             min="0"
-                            required
-                            autocomplete="off"
+                            readonly
+                            title="El stock se modifica solo en Ajuste de Inventario"
                           />
                         </div>
                         <div class="col-md-3">
@@ -303,11 +275,12 @@
                       <div class="row mb-3">
                         <div class="col-md-4">
                           <label for="precioCosto" class="form-label mb-1"
-                            >Precio Costo</label
+                            >Precio Costo *</label
                           >
+                          <!-- 💰 CAMPO DE PRECIO: Solo administradores pueden modificarlo -->
                           <input
                             type="number"
-                            class="form-control form-control-sm"
+                            class="form-control form-control-sm campo-precio"
                             id="precioCosto"
                             step="0.01"
                             min="0"
@@ -319,9 +292,10 @@
                           <label for="margenPorcentaje" class="form-label mb-1"
                             >Margen %</label
                           >
+                          <!-- 💰 CAMPO DE PRECIO: Solo administradores pueden modificarlo -->
                           <input
                             type="number"
-                            class="form-control form-control-sm"
+                            class="form-control form-control-sm campo-precio"
                             id="margenPorcentaje"
                             step="0.01"
                             min="0"
@@ -330,11 +304,12 @@
                         </div>
                         <div class="col-md-4">
                           <label for="precioVenta" class="form-label mb-1"
-                            >Precio Venta</label
+                            >Precio Venta *</label
                           >
+                          <!-- 💰 CAMPO DE PRECIO: Solo administradores pueden modificarlo -->
                           <input
                             type="number"
-                            class="form-control form-control-sm"
+                            class="form-control form-control-sm campo-precio"
                             id="precioVenta"
                             step="0.01"
                             min="0"
@@ -343,6 +318,7 @@
                           />
                         </div>
                       </div>
+
                       <div
                         class="modal-footer"
                         style="padding-top: 0.5rem; padding-bottom: 0"
@@ -355,10 +331,110 @@
                           Cancelar
                         </button>
                         <button type="submit" class="btn btn-primary">
-                          Guardar Producto
+                          <i class="fas fa-save me-1"></i>Guardar Producto
                         </button>
                       </div>
                     </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ==================== MODAL IMPORTAR EXCEL ==================== -->
+            <div
+              class="modal fade"
+              id="modalImportarExcel"
+              tabindex="-1"
+              aria-labelledby="modalImportarLabel"
+              aria-hidden="true"
+            >
+              <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                  <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="modalImportarLabel">
+                      <i class="fas fa-file-excel me-2"></i>Importar Productos
+                      desde Excel
+                    </h5>
+                    <button
+                      type="button"
+                      class="btn-close btn-close-white"
+                      data-bs-dismiss="modal"
+                    ></button>
+                  </div>
+                  <div class="modal-body">
+                    <!-- Instrucciones del formato -->
+                    <div class="alert alert-info py-2 mb-3">
+                      <strong
+                        ><i class="fas fa-info-circle me-1"></i>Formato del
+                        Excel:</strong
+                      >
+                      La primera fila debe contener exactamente estas cabeceras
+                      (en minúsculas):
+                      <div class="mt-2 p-2 bg-white rounded border">
+                        <code class="text-dark small">
+                          codigo, nombre, marca, descripcion, precio_costo,
+                          precio_venta, stock, stock_minimo, ubicacion
+                        </code>
+                      </div>
+                      <small class="d-block mt-1 text-muted">
+                        Ejemplo fila:
+                        <code
+                          >HER-001, Martillo Galponero 20oz, Total, Mango
+                          antideslizante, 12.50, 18.00, 25, 5, P1-E3-T2</code
+                        >
+                      </small>
+                    </div>
+
+                    <!-- Área de carga del archivo -->
+                    <div class="mb-3">
+                      <label for="inputArchivoExcel" class="form-label fw-bold">
+                        <i class="fas fa-upload me-1"></i>Seleccionar archivo
+                        .xlsx o .csv:
+                      </label>
+                      <input
+                        type="file"
+                        class="form-control"
+                        id="inputArchivoExcel"
+                        accept=".xlsx,.csv"
+                      />
+                    </div>
+
+                    <!-- Vista previa del nombre -->
+                    <div
+                      id="previewArchivo"
+                      class="d-none alert alert-success py-2"
+                    >
+                      <i class="fas fa-file-check me-1"></i>
+                      Archivo seleccionado:
+                      <strong id="nombreArchivoSeleccionado"></strong>
+                    </div>
+
+                    <div class="alert alert-warning py-2 mb-0">
+                      <i class="fas fa-exclamation-triangle me-1"></i>
+                      <strong>Importante:</strong> Si un producto con el mismo
+                      <em>código</em> ya existe, sus datos serán
+                      <strong>actualizados</strong>. Si no existe, será
+                      <strong>creado</strong>. El proceso generará un reporte
+                      PDF con el resultado.
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button
+                      type="button"
+                      class="btn btn-secondary"
+                      data-bs-dismiss="modal"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-success"
+                      id="btnConfirmarImportar"
+                      disabled
+                    >
+                      <i class="fas fa-file-import me-1"></i>Importar y ver
+                      Reporte
+                    </button>
                   </div>
                 </div>
               </div>

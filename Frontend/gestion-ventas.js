@@ -338,26 +338,39 @@ document.addEventListener("DOMContentLoaded", function () {
       const viewBtn = e.target.closest(".view-pdf-btn");
       if (viewBtn) {
         const ventaId = viewBtn.dataset.id;
+        const token = localStorage.getItem("token");
         try {
-          const response = await secureFetch(
+          // Usamos fetch nativo para poder llamar .blob() directamente.
+          // secureFetch procesa internamente la respuesta y no permite
+          // acceder al blob de un PDF (application/pdf).
+          // Fase 3: Abrir la ventana emergente ANTES del fetch para evitar el bloqueo del navegador
+          const pdfWindow = window.open("", "_blank");
+          if (!pdfWindow) {
+            Swal.fire("Atención", "El navegador bloqueó la ventana emergente. Por favor, permita ventanas emergentes para este sitio.", "warning");
+            return;
+          }
+          pdfWindow.document.write("<h3>Generando PDF...</h3>");
+
+          const response = await fetch(
             `${BASE_API_URL}/api/ventas/reporte/${ventaId}`,
+            { headers: { Authorization: `Bearer ${token}` } }
           );
+
+          if (!response.ok) {
+            pdfWindow.close();
+            const errText = await response.text();
+            throw new Error(errText || `Error ${response.status}`);
+          }
+
           const blob = await response.blob();
           const pdfUrl = URL.createObjectURL(blob);
-          window.open(pdfUrl, "_blank");
-          setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000); // Clean up the object URL after 1 minute
+          pdfWindow.location.href = pdfUrl;
+          
+          // Liberar la URL del objeto pasado 1 minuto
+          setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
         } catch (error) {
-          console.error("Error fetching PDF:", error);
-          if (
-            error.message !== "Unauthorized" &&
-            error.message !== "No token found"
-          ) {
-            Swal.fire(
-              "Error",
-              "No se pudo generar el reporte en PDF.",
-              "error",
-            );
-          }
+          console.error("Error al obtener PDF de la factura:", error);
+          Swal.fire("Error", "No se pudo generar el reporte en PDF. Revise la consola para más detalles.", "error");
         }
         return;
       }
@@ -533,13 +546,23 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (resultado.id_devolucion) {
         try {
-          const response = await secureFetch(
-            `${BASE_API_URL}/api/ventas/reporte-devolucion/${resultado.id_devolucion}`,
-          );
-          const blob = await response.blob();
-          const pdfUrl = URL.createObjectURL(blob);
-          window.open(pdfUrl, "_blank");
-          setTimeout(() => URL.createObjectURL(pdfUrl), 60000);
+          // Fase 3: Abrir ventana emergente ANTES de fetch
+          const pdfWindow = window.open("", "_blank");
+          if (pdfWindow) {
+            pdfWindow.document.write("<h3>Generando PDF de Devolución...</h3>");
+            const response = await fetch(
+              `${BASE_API_URL}/api/ventas/reporte-devolucion/${resultado.id_devolucion}`,
+              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+            );
+            if (response.ok) {
+               const blob = await response.blob();
+               const pdfUrl = URL.createObjectURL(blob);
+               pdfWindow.location.href = pdfUrl;
+               setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
+            } else {
+               pdfWindow.close();
+            }
+          }
         } catch (pdfError) {
           console.error("Error generating return PDF", pdfError);
           // The main operation succeeded, so we don't show a blocking error

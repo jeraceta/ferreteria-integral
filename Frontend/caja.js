@@ -7,16 +7,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Función para obtener el reporte X
   const obtenerReporteX = async () => {
+    // Fase 3: Abrir ventana ANTES del fetch
+    const ventana = window.open("", "_blank", "width=800,height=600");
+    if (!ventana) {
+      Swal.fire("Atención", "Permita ventanas emergentes para ver el reporte.", "warning");
+      return;
+    }
+    ventana.document.write("<h3>Generando Reporte X...</h3>");
+    
     try {
       const response = await fetch(`${API_VENTAS_URL}/reporte-x`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const result = await response.json();
-      if (!response.ok)
+      if (!response.ok) {
+        ventana.close();
         throw new Error(result.message || "Error al obtener el reporte X");
+      }
 
-      generarVentanaImpresion("Reporte X (Lectura Parcial)", result.datos);
+      generarVentanaImpresion("Reporte X (Lectura Parcial)", result.datos, ventana);
     } catch (error) {
+      ventana.close();
       Swal.fire("Error", error.message, "error");
     }
   };
@@ -34,21 +45,32 @@ document.addEventListener("DOMContentLoaded", () => {
       cancelButtonText: "Cancelar",
     }).then(async (result) => {
       if (result.isConfirmed) {
+        const ventana = window.open("", "_blank", "width=800,height=600");
+        if (!ventana) {
+          Swal.fire("Atención", "Permita ventanas emergentes para ver el reporte.", "warning");
+          return;
+        }
+        ventana.document.write("<h3>Generando Reporte Z...</h3>");
+
         try {
           const response = await fetch(`${API_VENTAS_URL}/cierre-z`, {
             method: "POST",
             headers: { Authorization: `Bearer ${getToken()}` },
           });
-          const result = await response.json();
-          if (!response.ok)
-            throw new Error(result.message || "Error al ejecutar el cierre Z");
+          const resResult = await response.json();
+          if (!response.ok) {
+            ventana.close();
+            throw new Error(resResult.message || "Error al ejecutar el cierre Z");
+          }
 
-          Swal.fire("¡Caja Cerrada!", result.message, "success");
+          Swal.fire("¡Caja Cerrada!", resResult.message, "success");
           generarVentanaImpresion(
             "Reporte Z (Cierre Definitivo)",
-            result.datos,
+            resResult.datos,
+            ventana
           );
         } catch (error) {
+          ventana.close();
           Swal.fire("Error", error.message, "error");
         }
       }
@@ -56,7 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // Función para generar la ventana de impresión
-  const generarVentanaImpresion = (titulo, datos) => {
+  const generarVentanaImpresion = (titulo, datos, ventana) => {
     const user = JSON.parse(localStorage.getItem("user"));
     const cajero = user ? user.nombre : "No identificado";
     const fecha = new Date().toLocaleString("es-VE");
@@ -129,7 +151,7 @@ document.addEventListener("DOMContentLoaded", () => {
             </html>
         `;
 
-    const ventana = window.open("", "_blank", "width=800,height=600");
+    ventana.document.open();
     ventana.document.write(contenido);
     ventana.document.close();
   };

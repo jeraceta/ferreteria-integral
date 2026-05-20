@@ -16,6 +16,7 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css"
     />
+    <script src="theme.js"></script>
     <link rel="stylesheet" href="styles.css" />
     <script src="auth.js"></script>
   </head>
@@ -33,13 +34,7 @@
             href="dashboard.html"
             class="list-group-item list-group-item-action"
           >
-            <i class="fas fa-home me-2"></i>Dashboard
-          </a>
-          <a
-            href="inventario.html"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-boxes me-2"></i>Inventario
+            <i class="fas fa-home me-2"></i>Dashboard >
           </a>
           <a
             href="#ventasSubmenu"
@@ -71,18 +66,37 @@
               ><i class="fas fa-file-alt me-2"></i>Presupuestos</a
             >
           </div>
+
+          <!-- Nuevo Grupo Administrativo -->
           <a
-            href="clientes.html"
-            class="list-group-item list-group-item-action"
+            href="#adminSubmenu"
+            data-bs-toggle="collapse"
+            class="list-group-item list-group-item-action ventas-dropdown-toggle"
           >
-            <i class="fas fa-users me-2"></i>Clientes
+            <i class="fas fa-cogs me-2"></i>Administrativo
+            <i class="fas fa-chevron-down float-end"></i>
           </a>
-          <a
-            href="productos.html"
-            class="list-group-item list-group-item-action"
-          >
-            <i class="fas fa-box me-2"></i>Productos
-          </a>
+          <div class="collapse" id="adminSubmenu">
+            <a
+              href="clientes.html"
+              class="list-group-item list-group-item-action sub-item"
+            >
+              <i class="fas fa-users me-2"></i>Clientes
+            </a>
+            <a
+              href="productos.html"
+              class="list-group-item list-group-item-action sub-item"
+            >
+              <i class="fas fa-box me-2"></i>Productos
+            </a>
+            <a
+              href="inventario.html"
+              class="list-group-item list-group-item-action sub-item"
+            >
+              <i class="fas fa-boxes me-2"></i>Inventario
+            </a>
+          </div>
+
           <a
             href="usuarios.html"
             id="nav-usuarios"

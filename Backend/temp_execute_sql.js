@@ -1,28 +1,20 @@
-const fs = require('fs').promises;
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+const fs = require('fs');
+const pool = require('./db.js');
 
-async function executeSql() {
-  let connection;
+async function run() {
   try {
-    connection = await mysql.createConnection({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-      multipleStatements: true
-    });
-
-    const sql = await fs.readFile('add_payment_fields.sql', 'utf-8');
-    await connection.query(sql);
-    console.log('Database schema updated successfully with payment fields.');
-  } catch (error) {
-    console.error('Error updating database schema:', error);
-  } finally {
-    if (connection) {
-      await connection.end();
+    const content = fs.readFileSync('db_tesoreria.sql', 'utf8');
+    const queries = content.split(';').filter(q => q.trim());
+    for (let query of queries) {
+      console.log('Running query:', query);
+      await pool.query(query);
     }
+    console.log("Tablas de Tesoreria creadas exitosamente");
+    process.exit(0);
+  } catch (err) {
+    console.error("Error ejecutando sql:", err);
+    process.exit(1);
   }
 }
 
-executeSql();
+run();
