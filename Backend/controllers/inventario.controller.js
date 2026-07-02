@@ -1434,43 +1434,60 @@ const generarReporteInventarioPDF = async (req, res, next) => {
       }
     }
 
-    // --- ENCABEZADO ESTANDARIZADO ---
+    // --- ENCABEZADO ESTANDARIZADO (Sin superposición) ---
     let currentY = 15;
+    const startX = 14;
+
+    // Recuadro en la esquina superior derecha con el nombre del reporte
+    const reportBoxW = 72;
+    const reportBoxH = 15;
+    const reportBoxX = pageWidth - startX - reportBoxW;
+    const reportBoxY = currentY;
+    doc.setDrawColor(26, 82, 118);
+    doc.setLineWidth(0.3);
+    doc.rect(reportBoxX, reportBoxY, reportBoxW, reportBoxH);
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(26, 82, 118);
+    doc.text("REPORTE DE INVENTARIO", reportBoxX + reportBoxW / 2, reportBoxY + 6, { align: "center" });
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0);
+    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, reportBoxX + reportBoxW / 2, reportBoxY + 11, { align: "center" });
+
+    // Logo (a la izquierda, sin invadir el recuadro)
     if (logoBase64) {
-      doc.addImage(logoBase64, "PNG", 14, currentY, 25, 25);
+      doc.addImage(logoBase64, "PNG", startX, currentY, 20, 20);
     }
-    
-    const textStartX = 45;
-    const maxTextWidth = pageWidth - textStartX - 15;
+
+    // Datos de empresa (al lado del logo, limitados al espacio antes del recuadro)
+    let textStartX = logoBase64 ? startX + 22 : startX;
+    const maxTextWidth = reportBoxX - textStartX - 5;
 
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
+    doc.setTextColor(0);
     const nombreSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
     doc.text(nombreSplit, textStartX, currentY + 5);
-    
-    currentY += 5 + (nombreSplit.length * 5);
 
-    doc.setFontSize(9);
+    currentY += 5 + (nombreSplit.length * 4);
+
+    doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.text(`RIF: ${empresa.rif}`, textStartX, currentY);
-    
-    currentY += 5;
+
+    currentY += 4;
     const dirSplit = doc.splitTextToSize(`Dirección: ${empresa.direccion}`, maxTextWidth);
     doc.text(dirSplit, textStartX, currentY);
-    
+
     currentY += (dirSplit.length * 4);
     doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX, currentY);
 
-    // Título del reporte y fecha (Derecha) - Ajustado Y para evitar overlap
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("REPORTE DE INVENTARIO", pageWidth - 15, 35, { align: "right" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, pageWidth - 15, 42, { align: "right" });
-    
-    // Subtítulo de filtros
-    currentY = Math.max(currentY + 10, 45);
+    // Asegurar que el contenido siguiente comienza por debajo del recuadro
+    currentY = Math.max(currentY + 5, reportBoxY + reportBoxH + 5);
+
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.text(`Depósito: `, 14, currentY);

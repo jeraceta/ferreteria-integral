@@ -163,44 +163,49 @@ const generarPDFPresupuesto = async (req, res, next) => {
       console.error("Error al cargar el logo:", error);
     }
 
-    // --- MARCA DE AGUA - MEDIA CARTA ---
-    // 🎯 Calculamos: Logo de fondo = 2.5" (45% del ancho disponible, perfecto para marca de agua)
-    // Antes era 120 unidades, ahora es 2.5 pulgadas proporcionadas al tamaño nuevo
-    if (logoBase64) {
-      const imgProps = doc.getImageProperties(logoBase64);
-      const logoWidth = 2.5; // 🎯 Reducido de 120 a 2.5 pulgadas
-      const logoHeight = (imgProps.height * logoWidth) / imgProps.width;
-      const x = (pageWidth - logoWidth) / 2;
-      const y = (pageHeight - logoHeight) / 2;
 
-      doc.saveGraphicsState();
-      try {
-        doc.setGState(new doc.GState({ opacity: 0.06 }));
-        doc.addImage(logoBase64, "PNG", x, y, logoWidth, logoHeight);
-      } catch (e) {
-        console.error(
-          "Fallo al aplicar GState para marca de agua. Usando sin opacidad.",
-          e,
-        );
-        console.error("Error logo Presupuesto:", e);
-      }
-    }
-
-    // --- ENCABEZADO ESTANDARIZADO ---
+    // --- ENCABEZADO CON PRESUPUESTO EN ESQUINA SUPERIOR DERECHA ---
+    const startX = 0.5;
     let currentY = 0.25;
+
+    // Recuadro de PRESUPUESTO (esquina superior derecha, compacto)
+    const presupBoxW = 1.8;
+    const presupBoxH = 0.65;
+    const presupBoxX = pageWidth - startX - presupBoxW;
+    const presupBoxY = currentY;
+    doc.setDrawColor(30, 81, 123);
+    doc.setLineWidth(0.015);
+    doc.rect(presupBoxX, presupBoxY, presupBoxW, presupBoxH);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(30, 81, 123);
+    doc.text("PRESUPUESTO", presupBoxX + presupBoxW / 2, presupBoxY + 0.12, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(0);
+    doc.text(`N°: ${String(presupuesto.id).padStart(6, "0")}`, presupBoxX + 0.08, presupBoxY + 0.25);
+    const fechaEmision = presupuesto.fecha_emision_fmt || new Date(presupuesto.fecha_emision).toLocaleDateString("es-VE");
+    doc.text(`Fecha: ${fechaEmision}`, presupBoxX + 0.08, presupBoxY + 0.38);
+    doc.text(`Válido hasta: ${new Date(presupuesto.fecha_vencimiento).toLocaleDateString("es-VE")}`, presupBoxX + 0.08, presupBoxY + 0.51);
+
+    // Logo (a la izquierda)
     if (logoBase64) {
       doc.addImage(logoBase64, "PNG", startX, currentY, 0.6, 0.6);
     }
     
+    // Datos de empresa (al lado del logo, sin invadir el recuadro de presupuesto)
     let textStartX = logoBase64 ? startX + 0.7 : startX;
-    const maxTextWidth = (pageWidth / 2) - textStartX - 0.1;
+    const maxTextWidth = presupBoxX - textStartX - 0.1;
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
+    doc.setTextColor(0);
     const nameSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
     doc.text(nameSplit, textStartX, currentY + 0.15);
     
-    currentY += 0.15 + (nameSplit.length * 0.15);
+    currentY += 0.15 + (nameSplit.length * 0.18);
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
@@ -210,33 +215,14 @@ const generarPDFPresupuesto = async (req, res, next) => {
     const dirSplit = doc.splitTextToSize(`Dir: ${empresa.direccion}`, maxTextWidth);
     doc.text(dirSplit, textStartX, currentY);
     
-    currentY += (dirSplit.length * 0.1);
+    currentY += (dirSplit.length * 0.12);
     doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX, currentY);
 
-    // Título y Control (Derecha) - Movido hacia abajo para evitar superposición
-    const rightBoxWidth = 1.8;
-    const rightBoxX = pageWidth - startX - rightBoxWidth;
-    const rightBoxY = 0.8;
-    
-    doc.setDrawColor(100);
-    doc.setLineWidth(0.01);
-    doc.rect(rightBoxX, rightBoxY, rightBoxWidth, 0.5);
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text("PRESUPUESTO", rightBoxX + rightBoxWidth / 2, rightBoxY + 0.18, { align: "center" });
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(`N°: ${String(presupuesto.id).padStart(6, "0")}`, rightBoxX + 0.05, rightBoxY + 0.3);
-    doc.text(`Fecha: ${presupuesto.fecha_emision_fmt}`, rightBoxX + 0.05, rightBoxY + 0.4);
-    doc.text(`Válido hasta: ${new Date(presupuesto.fecha_vencimiento).toLocaleDateString("es-VE")}`, rightBoxX + 0.05, rightBoxY + 0.5);
+    // Asegurar que currentY quede por debajo del recuadro de presupuesto
+    currentY = Math.max(currentY + 0.2, presupBoxY + presupBoxH + 0.12);
 
-    currentY = Math.max(currentY + 0.2, rightBoxY + 0.6);
-
-    // --- Cuadrícula de Cliente y Condiciones (2 Columnas con Bordes) ---
-    const boxHeight = 0.8;
-    const startX = 0.25;
+    // --- CUADRÍCULA: CLIENTE (izq) + CONDICIONES (der) ---
+    const boxHeight = 0.85;
     doc.setDrawColor(100);
     doc.setLineWidth(0.01);
     doc.rect(startX, currentY, pageWidth - 2 * startX, boxHeight);
@@ -244,35 +230,50 @@ const generarPDFPresupuesto = async (req, res, next) => {
     const midX = pageWidth / 2;
     doc.line(midX, currentY, midX, currentY + boxHeight);
     
-    const col1X = startX + 0.05;
-    const col2X = midX + 0.05;
-    let innerY = currentY + 0.15;
+    const col1X = startX + 0.08;
+    const col2X = midX + 0.08;
+    const colWidth = midX - startX - 0.16;
     
+    // --- COLUMNA 1: CLIENTE ---
+    let innerY = currentY + 0.12;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.text("CLIENTE", col1X, innerY);
-    doc.text("CONDICIONES", col2X, innerY);
     
-    innerY += 0.15;
-    
+    innerY += 0.13;
     doc.setFont("helvetica", "normal");
-    const nombreSplit = doc.splitTextToSize(`Nombre: ${presupuesto.razon_social}`, midX - startX - 0.1);
+    doc.setFontSize(7);
+    const nombreSplit = doc.splitTextToSize(`Nombre: ${presupuesto.razon_social}`, colWidth);
     doc.text(nombreSplit, col1X, innerY);
     
-    doc.text(`Válido por: 15 días`, col2X, innerY);
-    
-    innerY += (nombreSplit.length * 0.12);
+    innerY += nombreSplit.length * 0.11;
     doc.text(`CI/RIF: ${presupuesto.rif_cedula}`, col1X, innerY);
-    doc.text(`Tasa BCV Ref: ${safeParseFloat(presupuesto.tasa_bcv).toFixed(2)} Bs`, col2X, innerY);
     
-    innerY += 0.15;
+    innerY += 0.11;
     doc.text(`Teléfono: ${presupuesto.telefono || "N/A"}`, col1X, innerY);
     
-    innerY += 0.15;
-    const addrSplit = doc.splitTextToSize(`Dirección: ${presupuesto.direccion_fiscal || "N/A"}`, midX - startX - 0.1);
+    innerY += 0.11;
+    const addrSplit = doc.splitTextToSize(`Dirección: ${presupuesto.direccion_fiscal || "N/A"}`, colWidth);
     doc.text(addrSplit, col1X, innerY);
 
-    currentY += boxHeight + 0.15;
+    // --- COLUMNA 2: CONDICIONES ---
+    let innerYRight = currentY + 0.12;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("CONDICIONES", col2X, innerYRight);
+
+    innerYRight += 0.13;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.text(`Válido por: 15 días continuos`, col2X, innerYRight);
+
+    innerYRight += 0.11;
+    doc.text(`Tasa $ Aplicada: ${safeParseFloat(presupuesto.tasa_bcv).toFixed(2)} Bs`, col2X, innerYRight);
+
+    innerYRight += 0.11;
+    doc.text(`Forma de pago: Contado`, col2X, innerYRight);
+
+    currentY += boxHeight + 0.12;
 
     // --- TABLA DE ARTÍCULOS ---
     const tableBody = detallesPresupuesto.map((d) => {
@@ -284,10 +285,10 @@ const generarPDFPresupuesto = async (req, res, next) => {
         `$${safeParseFloat(d.total).toFixed(2)}`,
       ];
     });
-    const col0w = 0.5; // Cantidad
-    const col2w = 0.8; // Precio Unit.
-    const col3w = 0.8; // Total
-    const col1w = (pageWidth - 2 * startX) - col0w - col2w - col3w; // Descripción
+    const col0w = 0.5;
+    const col2w = 0.8;
+    const col3w = 0.8;
+    const col1w = (pageWidth - 2 * startX) - col0w - col2w - col3w;
 
     doc.autoTable({
       startY: currentY,
@@ -315,16 +316,19 @@ const generarPDFPresupuesto = async (req, res, next) => {
       alternateRowStyles: { fillColor: [245, 248, 255] },
     });
 
-    // --- BLOQUE DE TOTALES ---
-    currentY = doc.lastAutoTable.finalY + 0.2;
+    // --- CONDICIONES (izquierda) + TOTALES (derecha) — misma altura ---
+    currentY = doc.lastAutoTable.finalY + 0.15;
 
-    if (currentY > pageHeight - 1.5) {
+    if (currentY > pageHeight - 1.2) {
       doc.addPage();
       currentY = 0.5;
     }
 
-    const lblX = 3.8;
-    const valX = 5.2;
+    const totalsStartY = currentY;
+
+    // TOTALES (lado derecho)
+    const lblX = pageWidth - startX - 1.8;
+    const valX = pageWidth - startX;
     const lineH = 0.15;
 
     doc.setFontSize(8);
@@ -355,24 +359,16 @@ const generarPDFPresupuesto = async (req, res, next) => {
     const totalBolivares = safeParseFloat(presupuesto.total) * safeParseFloat(presupuesto.tasa_bcv);
     doc.text("TOTAL EN BS:", lblX, currentY);
     doc.text(`${totalBolivares.toFixed(2)} Bs.`, valX, currentY, { align: "right" });
-    
-    doc.setTextColor(100);
-    doc.text(
-      `Tasa $ Referencial: ${safeParseFloat(presupuesto.tasa_bcv).toFixed(2)} Bs.`,
-      pageWidth - 3.5,
-      currentY,
-      { align: "left" }
-    );
-    doc.setTextColor(0);
 
-    // Pie de Página Dinámico
-    currentY += 0.3;
-
-    doc.setFontSize(7);
+    // CONDICIONES (lado izquierdo, a la misma altura que los totales)
+    const condMaxWidth = lblX - startX - 0.2;
+    doc.setFontSize(6);
     doc.setFont("helvetica", "italic");
+    doc.setTextColor(80);
     const footerText = "Nota: Este presupuesto tiene una validez de 15 días continuos. Los precios están sujetos a cambio sin previo aviso. No asegura reserva de mercancía.";
-    const splitFooter = doc.splitTextToSize(footerText, pageWidth - 2 * startX);
-    doc.text(splitFooter, startX, currentY);
+    const splitFooter = doc.splitTextToSize(footerText, condMaxWidth);
+    doc.text(splitFooter, startX, totalsStartY);
+    doc.setTextColor(0);
 
     // --- ENVIAR PDF ---
     const pdfBuffer = doc.output("arraybuffer");

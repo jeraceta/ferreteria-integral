@@ -19,6 +19,7 @@ require("jspdf-autotable"); // Plugin para hacer tablas bonitas en el PDF
 const fs = require("fs"); // Para leer archivos del disco (el logo)
 const path = require("path"); // Para construir rutas de archivos
 const { getEmpresaConfig } = require("../config/empresa");
+const { createJsPdf } = require("../utils/pdfFormatHelper");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 📋 FUNCIÓN 1: procesarAjuste
@@ -192,10 +193,10 @@ const generarComprobanteAjuste = async (req, res, next) => {
       [id],
     );
 
-    // Usamos Carta completa (8.5 x 11 pulgadas)
-    const doc = new jsPDF({ orientation: "p", unit: "in", format: "letter" });
-    const pageWidth = doc.internal.pageSize.getWidth(); // 8.5"
-    const pageHeight = doc.internal.pageSize.getHeight(); // 11"
+    // Usamos el helper para decidir el tamaño del papel según los items
+    const itemCount = detalles.length;
+    const { doc, pageWidth, pageHeight } = createJsPdf(itemCount);
+    const startX = 0.5;
 
     // 1. Obtener datos de la empresa (Centralizado desde DB)
     const [empresaData] = await pool.query(
@@ -209,7 +210,6 @@ const generarComprobanteAjuste = async (req, res, next) => {
       telefono: configEstática.telefono,
       logo_path: null
     };
-    // Email siempre desde el config o DB si existiera (aquí usamos config por seguridad)
     empresa.email = configEstática.email;
 
     // ─── Intentamos cargar el logo dinámico ───
@@ -225,86 +225,98 @@ const generarComprobanteAjuste = async (req, res, next) => {
       }
     }
 
-    // ─── MARCA DE AGUA ───
-    if (logoBase64) {
-      const imgProps = doc.getImageProperties(logoBase64);
-      const logoW = 4;
-      const logoH = (imgProps.height * logoW) / imgProps.width;
-      doc.saveGraphicsState();
-      try {
-        doc.setGState(new doc.GState({ opacity: 0.03 }));
-        doc.addImage(
-          logoBase64,
-          "PNG",
-          (pageWidth - logoW) / 2,
-          (pageHeight - logoH) / 2,
-          logoW,
-          logoH,
-        );
-      } catch (_) {}
-      doc.restoreGraphicsState();
-    }
+    // --- ENCABEZADO CON COMPROBANTE DE AJUSTE EN ESQUINA SUPERIOR DERECHA ---
+    let currentY = 0.25;
 
-    // ─── ENCABEZADO ESTANDARIZADO ───
-    let currentY = 0.5;
-    if (logoBase64) {
-      doc.addImage(logoBase64, "PNG", 0.5, currentY, 1, 1);
-    }
-    
-    // Título del Ajuste y Número (Derecha) - Movido hacia abajo para evitar superposición
-    const rightBoxWidth = 1.8;
-    const rightBoxX = pageWidth - startX - rightBoxWidth;
-    const rightBoxY = 0.8;
-
-    const textStartX = 1.7;
-    const maxTextWidth = pageWidth - textStartX - 0.5;
+    // Recuadro de COMPROBANTE DE AJUSTE (esquina superior derecha, compacto)
+    const ajusteBoxW = 1.8;
+    const ajusteBoxH = 0.55;
+    const ajusteBoxX = pageWidth - startX - ajusteBoxW;
+    const ajusteBoxY = currentY;
+    doc.setDrawColor(44, 62, 80);
+    doc.setLineWidth(0.015);
+    doc.rect(ajusteBoxX, ajusteBoxY, ajusteBoxW, ajusteBoxH);
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    const nombreSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
-    doc.text(nombreSplit, textStartX, currentY + 0.2);
-    
-    currentY += 0.2 + (nombreSplit.length * 0.2);
+    doc.setFontSize(7);
+    doc.setTextColor(44, 62, 80);
+    doc.text("AJUSTE DE INVENTARIO", ajusteBoxX + ajusteBoxW / 2, ajusteBoxY + 0.12, { align: "center" });
 
-    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(0);
+    doc.text(`N° Ajuste: ${ajuste.numero_ajuste}`, ajusteBoxX + 0.08, ajusteBoxY + 0.25);
+    doc.text(`Fecha: ${new Date(ajuste.fecha_ajuste).toLocaleDateString()}`, ajusteBoxX + 0.08, ajusteBoxY + 0.38);
+
+    // Logo (a la izquierda)
+    if (logoBase64) {
+      doc.addImage(logoBase64, "PNG", startX, currentY, 0.6, 0.6);
+    }
+    
+    // Datos de empresa (al lado del logo, sin invadir el recuadro)
+    let textStartX = logoBase64 ? startX + 0.7 : startX;
+    const maxTextWidth = ajusteBoxX - textStartX - 0.1;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(0);
+    const nameSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
+    doc.text(nameSplit, textStartX, currentY + 0.15);
+    
+    currentY += 0.15 + (nameSplit.length * 0.18);
+
+    doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.text(`RIF: ${empresa.rif}`, textStartX, currentY);
     
-    currentY += 0.2;
-    const dirSplit = doc.splitTextToSize(`Dirección: ${empresa.direccion}`, maxTextWidth);
+    currentY += 0.12;
+    const dirSplit = doc.splitTextToSize(`Dir: ${empresa.direccion}`, maxTextWidth);
     doc.text(dirSplit, textStartX, currentY);
     
-    currentY += (dirSplit.length * 0.16);
+    currentY += (dirSplit.length * 0.12);
     doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX, currentY);
 
-    // Título y datos del ajuste (Derecha)
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("COMPROBANTE DE AJUSTE", pageWidth - 0.5, 0.6, { align: "right" });
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(`N° Ajuste: ${ajuste.numero_ajuste}`, pageWidth - 0.5, 0.85, { align: "right" });
-    doc.text(`Fecha: ${new Date(ajuste.fecha_ajuste).toLocaleString()}`, pageWidth - 0.5, 1.05, { align: "right" });
+    // Asegurar que currentY quede por debajo del recuadro
+    currentY = Math.max(currentY + 0.2, ajusteBoxY + ajusteBoxH + 0.12);
 
-    // --- Info del Ajuste ---
-    currentY = 2.0; 
-    doc.setDrawColor(200);
+    // --- CUADRÍCULA: RESPONSABLE (izq) + MOTIVO (der) ---
+    const boxHeight = 0.85;
+    doc.setDrawColor(100);
     doc.setLineWidth(0.01);
-    doc.rect(0.5, currentY, pageWidth - 1, 0.6);
+    doc.rect(startX, currentY, pageWidth - 2 * startX, boxHeight);
     
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("RESPONSABLE:", 0.6, currentY + 0.2);
-    doc.setFont("helvetica", "normal");
-    doc.text(ajuste.responsable || "N/A", 1.8, currentY + 0.2);
+    const midX = pageWidth / 2;
+    doc.line(midX, currentY, midX, currentY + boxHeight);
     
+    const col1X = startX + 0.08;
+    const col2X = midX + 0.08;
+    const colWidth = midX - startX - 0.16;
+    
+    // --- COLUMNA 1: RESPONSABLE ---
+    let innerY = currentY + 0.12;
     doc.setFont("helvetica", "bold");
-    doc.text("MOTIVO:", 0.6, currentY + 0.4);
+    doc.setFontSize(8);
+    doc.text("RESPONSABLE", col1X, innerY);
+    
+    innerY += 0.13;
     doc.setFont("helvetica", "normal");
-    const motivoLines = doc.splitTextToSize(ajuste.motivo || "Sin motivo", pageWidth - 2.5);
-    doc.text(motivoLines, 1.8, currentY + 0.4);
+    doc.setFontSize(7);
+    const nombreRespSplit = doc.splitTextToSize(`${ajuste.responsable || "N/A"}`, colWidth);
+    doc.text(nombreRespSplit, col1X, innerY);
 
-    currentY += 0.8;
+    // --- COLUMNA 2: MOTIVO ---
+    let innerYRight = currentY + 0.12;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("MOTIVO DEL AJUSTE", col2X, innerYRight);
+
+    innerYRight += 0.13;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    const motivoLines = doc.splitTextToSize(ajuste.motivo || "Sin motivo", colWidth);
+    doc.text(motivoLines, col2X, innerYRight);
+
+    currentY += boxHeight + 0.12;
 
     // ─── TABLA con los cambios de stock ───
     const tableBody = detalles.map((d) => [
@@ -320,42 +332,52 @@ const generarComprobanteAjuste = async (req, res, next) => {
       head: [["Código", "Producto", "Anterior", "Ajuste", "Nuevo"]],
       body: tableBody,
       theme: "grid",
+      margin: { left: startX, right: startX },
       headStyles: {
         fillColor: [44, 62, 80],
         textColor: 255,
         fontStyle: "bold",
-        fontSize: 9,
+        fontSize: 8,
+      },
+      bodyStyles: { 
+        fontSize: 7,
+        cellPadding: 0.05,
       },
       styles: { 
-        fontSize: 9,
         lineWidth: 0.01,
-        lineColor: [0, 0, 0]
+        lineColor: [200, 200, 200]
       },
       alternateRowStyles: { fillColor: [245, 245, 245] },
-      margin: { left: 0.5, right: 0.5 },
     });
 
-    // ─── Línea de firma al final ───
-    const finalY = doc.lastAutoTable.finalY + 1;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setLineWidth(0.01);
-    doc.line(0.5, finalY + 0.6, 3, finalY + 0.6);
-    doc.text("Firma del Responsable", 0.5, finalY + 0.8);
+    currentY = doc.lastAutoTable.finalY + 0.3;
+
+    if (currentY > pageHeight - 1.2) {
+      doc.addPage();
+      currentY = 0.5;
+    }
+
+    // ─── Línea de firmas y nota ───
+    const sigW = 2.0;
     
-    doc.line(pageWidth - 3, finalY + 0.6, pageWidth - 0.5, finalY + 0.6);
-    doc.text("Firma de Aprobación", pageWidth - 3, finalY + 0.8);
+    doc.setDrawColor(100);
+    doc.setLineWidth(0.01);
+    doc.line(startX + 0.2, currentY, startX + 0.2 + sigW, currentY);
+    doc.line(pageWidth - startX - 0.2 - sigW, currentY, pageWidth - startX - 0.2, currentY);
+    
+    doc.setFontSize(6);
+    doc.setFont("helvetica", "normal");
+    doc.text("Firma del Responsable", startX + 0.2 + (sigW/2), currentY + 0.1, { align: "center" });
+    doc.text("Firma de Aprobación", pageWidth - startX - 0.2 - (sigW/2), currentY + 0.1, { align: "center" });
 
     // ─── Pie de página ───
+    currentY += 0.3;
     doc.setFontSize(7);
     doc.setFont("helvetica", "italic");
-    doc.setTextColor(130);
-    doc.text(
-      "Este comprobante es un registro interno de ajuste de inventario. Conserve para auditoría.",
-      pageWidth / 2,
-      pageHeight - 0.5,
-      { align: "center" },
-    );
+    doc.setTextColor(80);
+    const footerText = "Este comprobante es un registro interno de ajuste de inventario. Conserve para auditoría. Los cambios realizados se han aplicado directamente en el stock general y en el depósito principal.";
+    const splitFooter = doc.splitTextToSize(footerText, pageWidth - 2 * startX);
+    doc.text(splitFooter, startX, currentY);
     doc.setTextColor(0);
 
     // 📤 Enviamos el PDF como respuesta

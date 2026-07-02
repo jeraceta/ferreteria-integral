@@ -103,6 +103,16 @@ document.addEventListener("DOMContentLoaded", () => {
                         </select>
                     </div>
 
+                    <div style="margin-bottom: 12px;">
+                        <label for="swal-pregunta" style="font-weight: 600; display: block; margin-bottom: 4px; font-size: 0.9em;">Pregunta de Seguridad</label>
+                        <input type="text" id="swal-pregunta" class="swal2-input" style="width: 100%; margin: 0;" placeholder="Ej: ¿Nombre de tu primera mascota?" value="${isEditing ? (user.pregunta_seguridad || "") : ""}" autocomplete="off">
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label for="swal-respuesta" style="font-weight: 600; display: block; margin-bottom: 4px; font-size: 0.9em;">Respuesta de Seguridad</label>
+                        <input type="text" id="swal-respuesta" class="swal2-input" style="width: 100%; margin: 0;" placeholder="${isEditing ? "Dejar en blanco para no cambiar" : "Respuesta de seguridad"}" autocomplete="off">
+                    </div>
+
                     <div style="text-align: right; margin-top: 8px;">
                         <button type="button" id="btn-limpiar" style="background: none; border: none; color: #6c757d; text-decoration: underline; cursor: pointer; font-size: 0.85em;">Limpiar</button>
                     </div>
@@ -135,6 +145,8 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("swal-nombre").value = "";
           document.getElementById("swal-username").value = "";
           document.getElementById("swal-password").value = "";
+          document.getElementById("swal-pregunta").value = "";
+          document.getElementById("swal-respuesta").value = "";
           document.getElementById("swal-rol").value = "Vendedor";
         });
       },
@@ -144,6 +156,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const username = document.getElementById("swal-username").value;
         const password = document.getElementById("swal-password").value;
         const rol = document.getElementById("swal-rol").value;
+        const pregunta_seguridad = document.getElementById("swal-pregunta").value.trim();
+        const respuesta_seguridad = document.getElementById("swal-respuesta").value.trim();
 
         if (!nombre || !username) {
           Swal.showValidationMessage(
@@ -158,9 +172,12 @@ document.addEventListener("DOMContentLoaded", () => {
           return false;
         }
 
-        const data = { nombre, username, rol };
+        const data = { nombre, username, rol, pregunta_seguridad: pregunta_seguridad || null };
         if (password) {
           data.password = password;
+        }
+        if (respuesta_seguridad) {
+          data.respuesta_seguridad = respuesta_seguridad;
         }
         return data;
       },

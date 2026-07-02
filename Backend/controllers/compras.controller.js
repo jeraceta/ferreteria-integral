@@ -145,6 +145,35 @@ const generarReporteCompra = async (req, res, next) => {
     };
     empresa.email = configEstática.email;
 
+    // 2. Obtener datos de la compra
+    const [compraData] = await pool.query(
+      `SELECT c.*, p.nombre, p.tipo_documento, p.numero_documento, p.telefono 
+       FROM compras c 
+       JOIN proveedores p ON c.id_proveedor = p.id 
+       WHERE c.id = ?`,
+      [id]
+    );
+
+    if (compraData.length === 0) {
+      return res.status(404).json({ message: "Compra no encontrada" });
+    }
+    const compra = compraData[0];
+
+    // 3. Obtener detalles de la compra
+    const [detalles] = await pool.query(
+      `SELECT dc.*, prod.codigo, prod.nombre 
+       FROM detalle_compras dc 
+       JOIN productos prod ON dc.id_producto = prod.id 
+       WHERE dc.id_compra = ?`,
+      [id]
+    );
+
+    // 4. Inicializar PDF
+    const itemCount = detalles.length;
+    const { doc, pageWidth, pageHeight } = createJsPdf(itemCount);
+    const startX = 0.5;
+    const safeParseFloat = (v) => parseFloat(v) || 0.0;
+
     // --- LOGO ---
     let logoBase64;
     if (empresa.logo_path) {
@@ -158,55 +187,62 @@ const generarReporteCompra = async (req, res, next) => {
       }
     }
 
-    // --- Info del Ajuste ---
-    currentY = 2.0; // Ajustamos Y después del encabezado dinámico
+    // --- ENCABEZADO CON RECEPCIÓN DE COMPRA EN ESQUINA SUPERIOR DERECHA ---
+    let currentY = 0.25;
+
+    // Recuadro de RECEPCIÓN DE COMPRA (esquina superior derecha, compacto)
+    const compraBoxW = 1.8;
+    const compraBoxH = 0.55;
+    const compraBoxX = pageWidth - startX - compraBoxW;
+    const compraBoxY = currentY;
+    doc.setDrawColor(30, 81, 123);
+    doc.setLineWidth(0.015);
+    doc.rect(compraBoxX, compraBoxY, compraBoxW, compraBoxH);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(30, 81, 123);
+    doc.text("RECEPCIÓN DE COMPRA", compraBoxX + compraBoxW / 2, compraBoxY + 0.12, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(0);
+    doc.text(`N° Interno: ${String(compra.id).padStart(6, "0")}`, compraBoxX + 0.08, compraBoxY + 0.25);
+    doc.text(`Fecha: ${new Date(compra.fecha_compra).toLocaleDateString()}`, compraBoxX + 0.08, compraBoxY + 0.38);
+
+    // Logo (a la izquierda)
     if (logoBase64) {
       doc.addImage(logoBase64, "PNG", startX, currentY, 0.6, 0.6);
     }
     
+    // Datos de empresa (al lado del logo, sin invadir el recuadro)
     let textStartX = logoBase64 ? startX + 0.7 : startX;
-    const maxTextWidth = (pageWidth / 2) - textStartX - 0.1;
+    const maxTextWidth = compraBoxX - textStartX - 0.1;
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    const nombreSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
-    doc.text(nombreSplit, textStartX, currentY + 0.15);
+    doc.setTextColor(0);
+    const nameSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
+    doc.text(nameSplit, textStartX, currentY + 0.15);
     
-    currentY += 0.15 + (nombreSplit.length * 0.15);
+    currentY += 0.15 + (nameSplit.length * 0.18);
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.text(`RIF: ${empresa.rif}`, textStartX, currentY);
     
     currentY += 0.12;
-    const dirSplit = doc.splitTextToSize(`Dirección: ${empresa.direccion}`, maxTextWidth);
+    const dirSplit = doc.splitTextToSize(`Dir: ${empresa.direccion}`, maxTextWidth);
     doc.text(dirSplit, textStartX, currentY);
     
-    currentY += (dirSplit.length * 0.1);
+    currentY += (dirSplit.length * 0.12);
     doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX, currentY);
 
-    // Título y N° (Derecha) - Movido hacia abajo para evitar superposición
-    const rightBoxWidth = 1.8;
-    const rightBoxX = pageWidth - startX - rightBoxWidth;
-    const rightBoxY = 0.8;
-    
-    doc.setDrawColor(100);
-    doc.setLineWidth(0.01);
-    doc.rect(rightBoxX, rightBoxY, rightBoxWidth, 0.5);
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text("RECEPCIÓN DE COMPRA", rightBoxX + rightBoxWidth / 2, rightBoxY + 0.15, { align: "center" });
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(`N° Interno: ${String(compra.id).padStart(6, "0")}`, rightBoxX + 0.05, rightBoxY + 0.3);
-    doc.text(`Fecha: ${new Date(compra.fecha_compra).toLocaleDateString()}`, rightBoxX + 0.05, rightBoxY + 0.4);
+    // Asegurar que currentY quede por debajo del recuadro
+    currentY = Math.max(currentY + 0.2, compraBoxY + compraBoxH + 0.12);
 
-    currentY = Math.max(currentY + 0.2, rightBoxY + 0.6);
-
-    // --- Bloque Proveedor e Info (2 Columnas) ---
-    const boxHeight = 0.65;
+    // --- CUADRÍCULA: PROVEEDOR (izq) + DATOS DE COMPRA (der) ---
+    const boxHeight = 0.85;
     doc.setDrawColor(100);
     doc.setLineWidth(0.01);
     doc.rect(startX, currentY, pageWidth - 2 * startX, boxHeight);
@@ -214,31 +250,43 @@ const generarReporteCompra = async (req, res, next) => {
     const midX = pageWidth / 2;
     doc.line(midX, currentY, midX, currentY + boxHeight);
     
-    const col1X = startX + 0.05;
-    const col2X = midX + 0.05;
-    let innerY = currentY + 0.15;
+    const col1X = startX + 0.08;
+    const col2X = midX + 0.08;
+    const colWidth = midX - startX - 0.16;
     
+    // --- COLUMNA 1: PROVEEDOR ---
+    let innerY = currentY + 0.12;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.text("PROVEEDOR", col1X, innerY);
-    doc.text("DATOS DE COMPRA", col2X, innerY);
     
-    innerY += 0.15;
-    
+    innerY += 0.13;
     doc.setFont("helvetica", "normal");
-    const nombreProvSplit = doc.splitTextToSize(`Nombre: ${compra.nombre}`, midX - startX - 0.1);
+    doc.setFontSize(7);
+    const nombreProvSplit = doc.splitTextToSize(`Nombre: ${compra.nombre}`, colWidth);
     doc.text(nombreProvSplit, col1X, innerY);
     
-    doc.text(`Factura Prov: ${compra.nro_factura_proveedor}`, col2X, innerY);
-    
-    innerY += (nombreProvSplit.length * 0.12);
+    innerY += nombreProvSplit.length * 0.11;
     doc.text(`RIF: ${compra.tipo_documento}-${compra.numero_documento}`, col1X, innerY);
-    doc.text(`Estado: ${compra.estado}`, col2X, innerY);
     
-    innerY += 0.15;
+    innerY += 0.11;
     doc.text(`Teléfono: ${compra.telefono || "N/A"}`, col1X, innerY);
 
-    currentY += boxHeight + 0.15;
+    // --- COLUMNA 2: DATOS DE COMPRA ---
+    let innerYRight = currentY + 0.12;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("DATOS DE COMPRA", col2X, innerYRight);
+
+    innerYRight += 0.13;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.text(`Factura Prov: ${compra.nro_factura_proveedor}`, col2X, innerYRight);
+
+    innerYRight += 0.11;
+    doc.text(`Estado: ${compra.estado}`, col2X, innerYRight);
+
+    currentY += boxHeight + 0.12;
 
     // --- TABLA DE ARTÍCULOS ---
     const tableBody = detalles.map((d) => [
@@ -282,16 +330,19 @@ const generarReporteCompra = async (req, res, next) => {
       alternateRowStyles: { fillColor: [245, 248, 255] },
     });
 
-    // --- BLOQUE DE TOTALES ---
-    currentY = doc.lastAutoTable.finalY + 0.2;
+    // --- CONDICIONES (izquierda) + TOTALES (derecha) — misma altura ---
+    currentY = doc.lastAutoTable.finalY + 0.15;
 
-    if (currentY > pageHeight - 1.5) {
+    if (currentY > pageHeight - 1.6) {
       doc.addPage();
       currentY = 0.5;
     }
 
-    const lblX = 3.8;
-    const valX = 5.2;
+    const totalsStartY = currentY;
+
+    // TOTALES (lado derecho)
+    const lblX = pageWidth - startX - 1.8;
+    const valX = pageWidth - startX;
     const lineH = 0.15;
 
     doc.setFontSize(8);
@@ -311,25 +362,30 @@ const generarReporteCompra = async (req, res, next) => {
     doc.text(`$${safeParseFloat(compra.total).toFixed(2)}`, valX, currentY, { align: "right" });
     currentY += lineH;
 
-    // Líneas de firmas (si es Carta completa o si hay espacio)
-    currentY += 0.4;
+    // CONDICIONES Y FIRMAS (lado izquierdo)
+    const condMaxWidth = lblX - startX - 0.2;
+    
+    // Líneas de firmas adaptadas al espacio izquierdo
+    const sigLineW = (condMaxWidth / 2) - 0.1;
+    const sigY = totalsStartY + 0.35;
+    
     doc.setDrawColor(100);
     doc.setLineWidth(0.01);
-    doc.line(startX + 0.2, currentY, startX + 1.8, currentY);
-    doc.line(pageWidth - startX - 1.8, currentY, pageWidth - startX - 0.2, currentY);
+    doc.line(startX, sigY, startX + sigLineW, sigY);
+    doc.line(startX + sigLineW + 0.2, sigY, startX + condMaxWidth, sigY);
     
-    doc.setFontSize(7);
+    doc.setFontSize(6);
     doc.setFont("helvetica", "normal");
-    doc.text("Recibido por (Almacén)", startX + 1.0, currentY + 0.1, { align: "center" });
-    doc.text("Autorizado por (Administración)", pageWidth - startX - 1.0, currentY + 0.1, { align: "center" });
+    doc.text("Recibido por (Almacén)", startX + (sigLineW/2), sigY + 0.1, { align: "center" });
+    doc.text("Autorizado por (Administración)", startX + sigLineW + 0.2 + (sigLineW/2), sigY + 0.1, { align: "center" });
 
     // Pie de Página Dinámico
-    currentY += 0.3;
-    doc.setFontSize(7);
     doc.setFont("helvetica", "italic");
+    doc.setTextColor(80);
     const footerText = "La mercancía aquí detallada ha sido recibida conforme a la factura original del proveedor. El inventario ha sido actualizado en el sistema automáticamente.";
-    const splitFooter = doc.splitTextToSize(footerText, pageWidth - 2 * startX);
-    doc.text(splitFooter, startX, currentY);
+    const splitFooter = doc.splitTextToSize(footerText, condMaxWidth);
+    doc.text(splitFooter, startX, sigY + 0.3);
+    doc.setTextColor(0);
 
     // --- ENVIAR PDF ---
     const pdfBuffer = doc.output("arraybuffer");

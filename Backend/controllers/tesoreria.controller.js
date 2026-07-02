@@ -205,40 +205,59 @@ const exportarCxcPDF = async (req, res, next) => {
       }
     }
 
-    // --- ENCABEZADO ESTANDARIZADO ---
+    // --- ENCABEZADO ESTANDARIZADO (Sin superposición) ---
     let currentY = 15;
+    const startX = 14;
+
+    // Recuadro en la esquina superior derecha con el nombre del reporte
+    const reportBoxW = 95;
+    const reportBoxH = 15;
+    const reportBoxX = pageWidth - startX - reportBoxW;
+    const reportBoxY = currentY;
+    doc.setDrawColor(26, 82, 118);
+    doc.setLineWidth(0.3);
+    doc.rect(reportBoxX, reportBoxY, reportBoxW, reportBoxH);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(26, 82, 118);
+    doc.text("REPORTE DE CUENTAS POR COBRAR", reportBoxX + reportBoxW / 2, reportBoxY + 6, { align: "center" });
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0);
+    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, reportBoxX + reportBoxW / 2, reportBoxY + 11, { align: "center" });
+
+    // Logo (a la izquierda)
     if (logoBase64) {
-      doc.addImage(logoBase64, "PNG", 14, currentY, 25, 25);
+      doc.addImage(logoBase64, "PNG", startX, currentY, 20, 20);
     }
-    
-    const textStartX = 45;
-    const maxTextWidth = pageWidth - textStartX - 15;
+
+    // Datos de empresa (al lado del logo, sin invadir el recuadro)
+    let textStartX = logoBase64 ? startX + 22 : startX;
+    const maxTextWidth = reportBoxX - textStartX - 5;
 
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
+    doc.setTextColor(0);
     const nombreSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
     doc.text(nombreSplit, textStartX, currentY + 5);
-    
-    currentY += 5 + (nombreSplit.length * 5);
 
-    doc.setFontSize(9);
+    currentY += 5 + (nombreSplit.length * 4);
+
+    doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.text(`RIF: ${empresa.rif}`, textStartX, currentY);
-    
-    currentY += 5;
+
+    currentY += 4;
     const dirSplit = doc.splitTextToSize(`Dirección: ${empresa.direccion}`, maxTextWidth);
     doc.text(dirSplit, textStartX, currentY);
-    
+
     currentY += (dirSplit.length * 4);
     doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX, currentY);
 
-    // Título del reporte y fecha (Derecha) - Ajustado Y para evitar overlap
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("REPORTE DE CUENTAS POR COBRAR", pageWidth - 15, 30, { align: "right" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, pageWidth - 15, 37, { align: "right" });
+    currentY = Math.max(currentY + 5, reportBoxY + reportBoxH + 5);
+
 
     const tableHead = [
       [
@@ -558,40 +577,59 @@ const exportarCxpPDF = async (req, res, next) => {
       }
     }
 
-    // --- ENCABEZADO ESTANDARIZADO ---
+    // --- ENCABEZADO ESTANDARIZADO (Sin superposición) ---
     let currentY = 15;
+    const startX2 = 14;
+
+    // Recuadro en la esquina superior derecha con el nombre del reporte
+    const reportBoxW2 = 95;
+    const reportBoxH2 = 15;
+    const reportBoxX2 = pageWidth - startX2 - reportBoxW2;
+    const reportBoxY2 = currentY;
+    doc.setDrawColor(26, 82, 118);
+    doc.setLineWidth(0.3);
+    doc.rect(reportBoxX2, reportBoxY2, reportBoxW2, reportBoxH2);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(26, 82, 118);
+    doc.text("REPORTE DE CUENTAS POR PAGAR", reportBoxX2 + reportBoxW2 / 2, reportBoxY2 + 6, { align: "center" });
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0);
+    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, reportBoxX2 + reportBoxW2 / 2, reportBoxY2 + 11, { align: "center" });
+
+    // Logo (a la izquierda)
     if (logoBase64) {
-      doc.addImage(logoBase64, "PNG", 14, currentY, 25, 25);
+      doc.addImage(logoBase64, "PNG", startX2, currentY, 20, 20);
     }
-    
-    const textStartX = 45;
-    const maxTextWidth = pageWidth - textStartX - 15;
+
+    // Datos de empresa (al lado del logo, sin invadir el recuadro)
+    let textStartX2 = logoBase64 ? startX2 + 22 : startX2;
+    const maxTextWidth2 = reportBoxX2 - textStartX2 - 5;
 
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    const nombreSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
-    doc.text(nombreSplit, textStartX, currentY + 5);
-    
-    currentY += 5 + (nombreSplit.length * 5);
+    doc.setTextColor(0);
+    const nombreSplit2 = doc.splitTextToSize(empresa.nombre, maxTextWidth2);
+    doc.text(nombreSplit2, textStartX2, currentY + 5);
 
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.text(`RIF: ${empresa.rif}`, textStartX, currentY);
-    
-    currentY += 5;
-    const dirSplit = doc.splitTextToSize(`Dirección: ${empresa.direccion}`, maxTextWidth);
-    doc.text(dirSplit, textStartX, currentY);
-    
-    currentY += (dirSplit.length * 4);
-    doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX, currentY);
+    currentY += 5 + (nombreSplit2.length * 4);
 
-    // Título del reporte y fecha (Derecha) - Ajustado Y para evitar overlap
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("REPORTE DE CUENTAS POR PAGAR", pageWidth - 15, 30, { align: "right" });
-    doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, pageWidth - 15, 37, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.text(`RIF: ${empresa.rif}`, textStartX2, currentY);
+
+    currentY += 4;
+    const dirSplit2 = doc.splitTextToSize(`Dirección: ${empresa.direccion}`, maxTextWidth2);
+    doc.text(dirSplit2, textStartX2, currentY);
+
+    currentY += (dirSplit2.length * 4);
+    doc.text(`Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`, textStartX2, currentY);
+
+    currentY = Math.max(currentY + 5, reportBoxY2 + reportBoxH2 + 5);
+
 
     const tableHead = [
       [

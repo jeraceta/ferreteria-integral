@@ -17,8 +17,30 @@ const pool = mysql.createPool({
 // Prueba de conexión al arrancar (muy útil para saber si XAMPP está activo)
 pool
   .getConnection()
-  .then((conn) => {
+  .then(async (conn) => {
     console.log("✅ ¡Conexión a MySQL exitosa!");
+    
+    try {
+      // Verificar si las columnas de seguridad existen en la tabla usuarios
+      const [columns] = await conn.query("SHOW COLUMNS FROM usuarios");
+      const hasPregunta = columns.some(col => col.Field === "pregunta_seguridad");
+      const hasRespuesta = columns.some(col => col.Field === "respuesta_seguridad");
+
+      if (!hasPregunta) {
+        console.log("⚠️ Columna 'pregunta_seguridad' no encontrada. Creándola...");
+        await conn.query("ALTER TABLE usuarios ADD COLUMN pregunta_seguridad VARCHAR(255) NULL COMMENT 'Pregunta de seguridad'");
+        console.log("✅ Columna 'pregunta_seguridad' creada con éxito.");
+      }
+
+      if (!hasRespuesta) {
+        console.log("⚠️ Columna 'respuesta_seguridad' no encontrada. Creándola...");
+        await conn.query("ALTER TABLE usuarios ADD COLUMN respuesta_seguridad VARCHAR(255) NULL COMMENT 'Hash respuesta de seguridad'");
+        console.log("✅ Columna 'respuesta_seguridad' creada con éxito.");
+      }
+    } catch (migError) {
+      console.error("❌ Error al verificar/crear columnas de seguridad en la DB:", migError.message);
+    }
+
     conn.release();
   })
   .catch((err) => {

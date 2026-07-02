@@ -344,7 +344,7 @@ const generarPDFDevolucion = async (req, res, next) => {
     const { doc, pageWidth, pageHeight, isHalfLetter, label } =
       createJsPdf(itemCount);
     doc.setProperties({ title: `Devolución - ${label}` });
-    const startX = 0.25;
+    const startX = 0.5;
 
     // --- LOGO ---
     let logoBase64;
@@ -366,14 +366,15 @@ const generarPDFDevolucion = async (req, res, next) => {
     }
 
     let textStartX = logoBase64 ? startX + 0.7 : startX;
-    const maxTextWidth = pageWidth / 2 - textStartX - 0.1;
+    const maxTextWidth = pageWidth - textStartX - startX; // Full width available
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     const nameSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
     doc.text(nameSplit, textStartX, currentY + 0.15);
 
-    currentY += 0.15 + nameSplit.length * 0.15;
+    // Espaciado dinámico basado en líneas de nombre (aprox 0.18 por línea a 12pt)
+    currentY += 0.15 + nameSplit.length * 0.18;
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
@@ -386,61 +387,110 @@ const generarPDFDevolucion = async (req, res, next) => {
     );
     doc.text(dirSplit, textStartX, currentY);
 
-    currentY += dirSplit.length * 0.1;
+    currentY += dirSplit.length * 0.12; // aprox 0.12 por línea a 8pt
     doc.text(
       `Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`,
       textStartX,
       currentY,
     );
 
-    // Título y Número (Derecha) - Movido hacia abajo para evitar superposición
-    const rightBoxWidth = 1.8;
-    const rightBoxX = pageWidth - startX - rightBoxWidth;
-    const rightBoxY = 0.8;
+    // Margen antes de la cuadrícula de información
+    currentY += 0.25;
 
+    // 2. Cuadrícula de Cliente y Pago (2 Columnas con Bordes)
+    const boxHeight = 1.35; // Altura expandida para contener todos los datos
     doc.setDrawColor(100);
     doc.setLineWidth(0.01);
-    doc.rect(rightBoxX, rightBoxY, rightBoxWidth, 0.5);
+    doc.rect(startX, currentY, pageWidth - 2 * startX, boxHeight);
 
+    const midX = pageWidth / 2;
+    doc.line(midX, currentY, midX, currentY + boxHeight);
+
+    const col1X = startX + 0.08;
+    const col2X = midX + 0.08;
+    const colWidth = midX - startX - 0.16;
+
+    // --- COLUMNA 1: CLIENTE ---
+    let innerY = currentY + 0.15;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
+    doc.setFontSize(8);
+    doc.text("CLIENTE", col1X, innerY);
+
+    innerY += 0.14;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    const nombreSplit = doc.splitTextToSize(
+      `Nombre: ${devolucion.razon_social}`,
+      colWidth,
+    );
+    doc.text(nombreSplit, col1X, innerY);
+
+    innerY += nombreSplit.length * 0.12;
+    doc.text(`CI/RIF: ${devolucion.rif_cedula}`, col1X, innerY);
+
+    innerY += 0.12;
+    doc.text(`Teléfono: ${devolucion.telefono || "N/A"}`, col1X, innerY);
+
+    innerY += 0.12;
+    const addrSplit = doc.splitTextToSize(
+      `Dirección: ${devolucion.direccion_fiscal || "N/A"}`,
+      colWidth,
+    );
+    doc.text(addrSplit, col1X, innerY);
+
+    // --- COLUMNA 2: COMPROBANTE DE DEVOLUCIÓN ---
+    let innerYRight = currentY + 0.15;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("DEVOLUCIÓN", col2X, innerYRight);
+
+    innerYRight += 0.14;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
     doc.text(
-      "COMPROBANTE DE DEVOLUCIÓN",
-      rightBoxX + rightBoxWidth / 2,
-      rightBoxY + 0.15,
-      { align: "center" },
+      `N° Devolución: ${String(devolucion.id_devolucion).padStart(6, "0")}`,
+      col2X,
+      innerYRight,
     );
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(
-      `N°: ${String(devolucion.id_devolucion).padStart(6, "0")}`,
-      rightBoxX + 0.05,
-      rightBoxY + 0.3,
-    );
+    innerYRight += 0.12;
     doc.text(
       `Fecha: ${new Date(devolucion.fecha).toLocaleDateString()}`,
-      rightBoxX + 0.05,
-      rightBoxY + 0.4,
+      col2X,
+      innerYRight,
     );
 
-    currentY = Math.max(currentY + 0.2, rightBoxY + 0.6);
+    // Línea separadora horizontal en la columna derecha
+    const separatorY = currentY + 0.6;
+    doc.setDrawColor(150);
+    doc.line(midX, separatorY, pageWidth - startX, separatorY);
+    doc.setDrawColor(100); // restaurar color de borde
 
-    // --- BLOQUE DE CLIENTE - MEDIA CARTA ---
-    // 🎯 Rectángulo comprimido: X=0.25", Y=1.1", ancho=5", alto=0.5"
-    doc.setDrawColor(200);
-    doc.rect(0.25, 1.1, pageWidth - 0.5, 0.5);
+    // Datos de la Venta de Referencia
+    innerYRight = separatorY + 0.15;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7); // 🎯 Tamaño pequeño
-    doc.text("CLIENTE:", 0.35, 1.2);
+    doc.setFontSize(8);
+    doc.text("VENTA DE REFERENCIA", col2X, innerYRight);
+
+    innerYRight += 0.14;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6); // Aún más pequeño para datos
-    doc.text(`${devolucion.razon_social}`, 0.8, 1.2);
-    doc.text(`C.I./RIF: ${devolucion.rif_cedula}`, 0.35, 1.32);
-    doc.text(`Dirección: ${devolucion.direccion_fiscal || "N/A"}`, 0.35, 1.44);
+    doc.setFontSize(7);
+    doc.text(
+      `N° Control original: ${devolucion.numero_control || "S/N"}`,
+      col2X,
+      innerYRight,
+    );
+
+    innerYRight += 0.12;
+    doc.text(
+      `Fecha original: ${new Date(devolucion.fecha_venta).toLocaleDateString()}`,
+      col2X,
+      innerYRight,
+    );
+
+    currentY += boxHeight + 0.15; // Espacio antes de tabla
 
     // --- TABLA DE ARTÍCULOS DEVUELTOS - MEDIA CARTA ---
-    // 🎯 Tabla comprimida con fuentes pequeñas para media carta
     const tableBody = detallesDevolucion.map((d) => [
       d.cantidad,
       d.descripcion,
@@ -448,10 +498,10 @@ const generarPDFDevolucion = async (req, res, next) => {
       `$${safeParseFloat(d.total).toFixed(2)}`,
     ]);
 
-    const availableTableWidth = pageWidth - 0.5;
-    const columnWidthCantidad = 0.45;
-    const columnWidthPrecio = 0.75;
-    const columnWidthSubtotal = 0.75;
+    const availableTableWidth = pageWidth - 2 * startX;
+    const columnWidthCantidad = 0.5;
+    const columnWidthPrecio = 0.8;
+    const columnWidthSubtotal = 0.8;
     const columnWidthDescripcion =
       availableTableWidth -
       columnWidthCantidad -
@@ -459,11 +509,11 @@ const generarPDFDevolucion = async (req, res, next) => {
       columnWidthSubtotal;
 
     doc.autoTable({
-      startY: 1.75, // 🎯 Bajo el bloque de cliente
+      startY: currentY, // Dinámico
       head: [["Cant.", "Descripción", "Precio Unit.", "Subtotal"]],
       body: tableBody,
       theme: "grid",
-      tableWidth: availableTableWidth,
+      margin: { left: startX, right: startX },
       headStyles: {
         fillColor: [220, 53, 69],
         textColor: 255,
@@ -485,8 +535,7 @@ const generarPDFDevolucion = async (req, res, next) => {
     });
 
     // --- BLOQUE DE TOTALES - MEDIA CARTA ---
-    // 🎯 Totales comprimidos justo después de la tabla
-    let finalY = doc.lastAutoTable.finalY || 1.8;
+    let finalY = doc.lastAutoTable.finalY || currentY + 0.5;
     const finalYAnchor = pageHeight - 0.75;
     currentY = Math.max(finalY + 0.1, finalYAnchor - 0.6);
 
@@ -498,7 +547,7 @@ const generarPDFDevolucion = async (req, res, next) => {
       montoTotalDevuelto * safeParseFloat(devolucion.tasa_bcv);
 
     const labelX = pageWidth - (isHalfLetter ? 2.7 : 3.5);
-    const valueX = pageWidth - 0.25;
+    const valueX = pageWidth - startX;
 
     const drawLabelRightValue = (
       label,
@@ -513,7 +562,7 @@ const generarPDFDevolucion = async (req, res, next) => {
       return y + lineHeight * splitLabel.length;
     };
 
-    doc.setFontSize(8); // 🎯 Tamaño pequeño
+    doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     currentY = drawLabelRightValue(
       "MONTO TOTAL A FAVOR:",
@@ -533,20 +582,20 @@ const generarPDFDevolucion = async (req, res, next) => {
     currentY += 0.22;
 
     // --- MOTIVO Y COMENTARIOS ---
-    doc.setFontSize(7); // 🎯 Tamaño pequeño
+    doc.setFontSize(7);
     doc.setFont("helvetica", "bold");
-    doc.text("Motivo:", 0.25, currentY);
+    doc.text("Motivo:", startX, currentY);
     doc.setFont("helvetica", "normal");
-    doc.text(devolucion.motivo || "No especificado", 0.5, currentY);
+    doc.text(devolucion.motivo || "No especificado", startX + 0.5, currentY);
 
     if (devolucion.comentario) {
       currentY += 0.15;
       doc.setFont("helvetica", "italic");
       const splitComentario = doc.splitTextToSize(
         `Comentario: ${devolucion.comentario}`,
-        pageWidth - 0.5,
+        pageWidth - 2 * startX,
       );
-      doc.text(splitComentario, 0.25, currentY);
+      doc.text(splitComentario, startX, currentY);
     }
 
     // --- PIE DE PÁGINA - MEDIA CARTA ---
@@ -916,21 +965,58 @@ const generarComprobante = async (req, res, next) => {
       }
     }
 
-    // --- ENCABEZADO ESTANDARIZADO ---
+    // --- ENCABEZADO CON ORDEN DE DESPACHO EN ESQUINA SUPERIOR DERECHA ---
     let currentY = 0.25;
+
+    // Recuadro de ORDEN DE DESPACHO (esquina superior derecha, compacto)
+    const despachoBoxW = 1.8;
+    const despachoBoxH = 0.55;
+    const despachoBoxX = pageWidth - startX - despachoBoxW;
+    const despachoBoxY = currentY;
+    doc.setDrawColor(0, 92, 168);
+    doc.setLineWidth(0.015);
+    doc.rect(despachoBoxX, despachoBoxY, despachoBoxW, despachoBoxH);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(0, 92, 168);
+    doc.text(
+      "ORDEN DE DESPACHO",
+      despachoBoxX + despachoBoxW / 2,
+      despachoBoxY + 0.12,
+      { align: "center" },
+    );
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(0);
+    doc.text(
+      `N° Control: ${venta.numero_control || "S/N"}`,
+      despachoBoxX + 0.08,
+      despachoBoxY + 0.25,
+    );
+    doc.text(
+      `Fecha: ${new Date(venta.fecha_venta).toLocaleDateString()}`,
+      despachoBoxX + 0.08,
+      despachoBoxY + 0.38,
+    );
+
+    // Logo (a la izquierda)
     if (logoBase64) {
       doc.addImage(logoBase64, "PNG", startX, currentY, 0.6, 0.6);
     }
 
+    // Datos de empresa (al lado del logo, sin invadir el recuadro de despacho)
     let textStartX = logoBase64 ? startX + 0.7 : startX;
-    const maxTextWidth = pageWidth / 2 - textStartX - 0.1;
+    const maxTextWidth = despachoBoxX - textStartX - 0.1;
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
+    doc.setTextColor(0);
     const nameSplit = doc.splitTextToSize(empresa.nombre, maxTextWidth);
     doc.text(nameSplit, textStartX, currentY + 0.15);
 
-    currentY += 0.15 + nameSplit.length * 0.15;
+    currentY += 0.15 + nameSplit.length * 0.18;
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
@@ -943,48 +1029,18 @@ const generarComprobante = async (req, res, next) => {
     );
     doc.text(dirSplit, textStartX, currentY);
 
-    currentY += dirSplit.length * 0.1;
+    currentY += dirSplit.length * 0.12;
     doc.text(
       `Tlf: ${empresa.telefono} | Email: ${empresa.email || ""}`,
       textStartX,
       currentY,
     );
 
-    // Título y Control (Derecha) - Movido hacia abajo para evitar superposición
-    const rightBoxWidth = 1.8;
-    const rightBoxX = pageWidth - startX - rightBoxWidth;
-    const rightBoxY = 0.8;
+    // Asegurar que currentY quede por debajo del recuadro de despacho
+    currentY = Math.max(currentY + 0.2, despachoBoxY + despachoBoxH + 0.12);
 
-    doc.setDrawColor(100);
-    doc.setLineWidth(0.01);
-    doc.rect(rightBoxX, rightBoxY, rightBoxWidth, 0.5);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text(
-      "ORDEN DE DESPACHO",
-      rightBoxX + rightBoxWidth / 2,
-      rightBoxY + 0.15,
-      { align: "center" },
-    );
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(
-      `N° Control: ${venta.numero_control || "S/N"}`,
-      rightBoxX + 0.05,
-      rightBoxY + 0.3,
-    );
-    doc.text(
-      `Fecha: ${new Date(venta.fecha_venta).toLocaleDateString()}`,
-      rightBoxX + 0.05,
-      rightBoxY + 0.4,
-    );
-
-    currentY = Math.max(currentY + 0.2, rightBoxY + 0.6);
-
-    // 2. Cuadrícula de Cliente y Pago (2 Columnas con Bordes)
-    const boxHeight = 0.8;
+    // --- CUADRÍCULA: CLIENTE (izq) + DATOS DE PAGO (der) ---
+    const boxHeight = 0.85;
     doc.setDrawColor(100);
     doc.setLineWidth(0.01);
     doc.rect(startX, currentY, pageWidth - 2 * startX, boxHeight);
@@ -992,23 +1048,47 @@ const generarComprobante = async (req, res, next) => {
     const midX = pageWidth / 2;
     doc.line(midX, currentY, midX, currentY + boxHeight);
 
-    const col1X = startX + 0.05;
-    const col2X = midX + 0.05;
-    let innerY = currentY + 0.15;
+    const col1X = startX + 0.08;
+    const col2X = midX + 0.08;
+    const colWidth = midX - startX - 0.16;
 
+    // --- COLUMNA 1: CLIENTE ---
+    let innerY = currentY + 0.12;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.text("CLIENTE", col1X, innerY);
-    doc.text("DATOS DE PAGO", col2X, innerY);
 
-    innerY += 0.15;
-
+    innerY += 0.13;
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
     const nombreSplit = doc.splitTextToSize(
       `Nombre: ${venta.razon_social}`,
-      midX - startX - 0.1,
+      colWidth,
     );
     doc.text(nombreSplit, col1X, innerY);
+
+    innerY += nombreSplit.length * 0.11;
+    doc.text(`CI/RIF: ${venta.rif_cedula}`, col1X, innerY);
+
+    innerY += 0.11;
+    doc.text(`Teléfono: ${venta.telefono || "N/A"}`, col1X, innerY);
+
+    innerY += 0.11;
+    const addrSplit = doc.splitTextToSize(
+      `Dirección: ${venta.direccion_fiscal || "N/A"}`,
+      colWidth,
+    );
+    doc.text(addrSplit, col1X, innerY);
+
+    // --- COLUMNA 2: DATOS DE PAGO ---
+    let innerYRight = currentY + 0.12;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("DATOS DE PAGO", col2X, innerYRight);
+
+    innerYRight += 0.13;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
 
     const metodos = pagosData.map((p) => p.metodo_pago).join(", ");
     const referencias =
@@ -1016,31 +1096,22 @@ const generarComprobante = async (req, res, next) => {
         .filter((p) => p.referencia)
         .map((p) => p.referencia)
         .join(", ") || "N/A";
-    doc.text(`Método: ${metodos}`, col2X, innerY);
 
-    innerY += nombreSplit.length * 0.12;
-    doc.text(`CI/RIF: ${venta.rif_cedula}`, col1X, innerY);
+    doc.text(`Método: ${metodos}`, col2X, innerYRight);
+
+    innerYRight += 0.11;
     doc.text(
-      `Tasa BCV: ${safeParseFloat(venta.tasa_bcv).toFixed(2)} Bs`,
+      `Tasa $ Aplicada: ${safeParseFloat(venta.tasa_bcv).toFixed(2)} Bs`,
       col2X,
-      innerY,
+      innerYRight,
     );
 
-    innerY += 0.15;
-    doc.text(`Teléfono: ${venta.telefono || "N/A"}`, col1X, innerY);
+    innerYRight += 0.11;
+    doc.text(`Referencia: ${referencias}`, col2X, innerYRight);
 
-    innerY += 0.15;
-    const addrSplit = doc.splitTextToSize(
-      `Dirección: ${venta.direccion_fiscal || "N/A"}`,
-      midX - startX - 0.1,
-    );
-    doc.text(addrSplit, col1X, innerY);
+    currentY += boxHeight + 0.12;
 
-    doc.text(`Referencia: ${referencias}`, col2X, innerY);
-
-    currentY += boxHeight + 0.15; // Espacio antes de tabla
-
-    // 5. Ajuste de Tabla de Artículos
+    // 5. Tabla de Artículos
     const tableBody = detallesVenta.map((d) => {
       const descripcionConMarca = d.marca
         ? `${d.descripcion} [${d.marca}]`
@@ -1053,10 +1124,10 @@ const generarComprobante = async (req, res, next) => {
       ];
     });
 
-    const col0w = 0.5; // Cantidad
-    const col2w = 0.8; // Precio Unit.
-    const col3w = 0.8; // Total
-    const col1w = pageWidth - 2 * startX - col0w - col2w - col3w; // Descripción (residual)
+    const col0w = 0.5;
+    const col2w = 0.8;
+    const col3w = 0.8;
+    const col1w = pageWidth - 2 * startX - col0w - col2w - col3w;
 
     doc.autoTable({
       startY: currentY,
@@ -1072,7 +1143,7 @@ const generarComprobante = async (req, res, next) => {
       },
       bodyStyles: {
         fontSize: 7,
-        cellPadding: 0.05, // Espaciado compacto
+        cellPadding: 0.05,
       },
       columnStyles: {
         0: { cellWidth: col0w, halign: "center" },
@@ -1084,18 +1155,20 @@ const generarComprobante = async (req, res, next) => {
       alternateRowStyles: { fillColor: [245, 248, 255] },
     });
 
-    currentY = doc.lastAutoTable.finalY + 0.2;
+    currentY = doc.lastAutoTable.finalY + 0.15;
 
-    // Verificar si queda espacio para los totales y el footer
-    if (currentY > pageHeight - 1.5) {
+    if (currentY > pageHeight - 1.2) {
       doc.addPage();
       currentY = 0.5;
     }
 
-    // 3. Sección de Totales (Interlineado Reducido)
-    const lblX = 3.8;
-    const valX = 5.2;
-    const lineH = 0.15; // Decremento estricto de interlineado
+    // --- CONDICIONES (izquierda) + TOTALES (derecha) — misma altura ---
+    const totalsStartY = currentY;
+
+    // TOTALES (lado derecho)
+    const lblX = pageWidth - startX - 1.8;
+    const valX = pageWidth - startX;
+    const lineH = 0.15;
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
@@ -1140,15 +1213,16 @@ const generarComprobante = async (req, res, next) => {
       align: "right",
     });
 
-    // 4. Pie de Página Dinámico (Anclado al final de totales)
-    currentY += 0.3;
-
-    doc.setFontSize(7);
+    // CONDICIONES (lado izquierdo, a la misma altura que los totales)
+    const condMaxWidth = lblX - startX - 0.2;
+    doc.setFontSize(6);
     doc.setFont("helvetica", "italic");
+    doc.setTextColor(80);
     const footerText =
       "CONDICIONES: Cambios o devoluciones por defectos de fábrica dentro de 5 días hábiles. Presenta este comprobante original. ¡Gracias por su compra!";
-    const splitFooter = doc.splitTextToSize(footerText, pageWidth - 2 * startX);
-    doc.text(splitFooter, startX, currentY);
+    const splitFooter = doc.splitTextToSize(footerText, condMaxWidth);
+    doc.text(splitFooter, startX, totalsStartY);
+    doc.setTextColor(0);
 
     // Enviar PDF al cliente
     const pdfBuffer = doc.output("arraybuffer");

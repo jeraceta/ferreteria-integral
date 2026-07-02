@@ -169,6 +169,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 <option value="Administrador" ${isEditing && user.rol === "Administrador" ? "selected" : ""}>Administrador</option>
               </select>
             </div>
+            <div style="margin-bottom: 12px;">
+              <label for="swal-pregunta" style="font-weight: 600; display: block; margin-bottom: 4px; font-size: 0.9em;">Pregunta de Seguridad</label>
+              <input type="text" id="swal-pregunta" class="swal2-input" style="width: 100%; margin: 0;" placeholder="Ej: ¿Nombre de tu primera mascota?" value="${isEditing ? (user.pregunta_seguridad || "") : ""}" autocomplete="off">
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label for="swal-respuesta" style="font-weight: 600; display: block; margin-bottom: 4px; font-size: 0.9em;">Respuesta de Seguridad</label>
+              <input type="text" id="swal-respuesta" class="swal2-input" style="width: 100%; margin: 0;" placeholder="${isEditing ? "Dejar en blanco para no cambiar" : "Respuesta de seguridad"}" autocomplete="off">
+            </div>
           </div>
         `,
         showCancelButton: true,
@@ -194,6 +202,8 @@ document.addEventListener("DOMContentLoaded", () => {
             .value.trim();
           const password = document.getElementById("swal-password").value;
           const rol = document.getElementById("swal-rol").value;
+          const pregunta_seguridad = document.getElementById("swal-pregunta").value.trim();
+          const respuesta_seguridad = document.getElementById("swal-respuesta").value.trim();
 
           if (!nombre || !username || !rol) {
             Swal.showValidationMessage("Todos los campos son obligatorios");
@@ -205,20 +215,22 @@ document.addEventListener("DOMContentLoaded", () => {
             );
             return false;
           }
-          return { nombre, username, password, rol };
+          return { nombre, username, password, rol, pregunta_seguridad, respuesta_seguridad };
         },
       }).then((result) => {
         if (result.isConfirmed) {
-          const { nombre, username, password, rol } = result.value;
+          const { nombre, username, password, rol, pregunta_seguridad, respuesta_seguridad } = result.value;
           if (isEditing) {
             actualizarUsuario(user.id, {
               nombre,
               username,
               password: password || undefined,
               rol,
+              pregunta_seguridad: pregunta_seguridad || null,
+              respuesta_seguridad: respuesta_seguridad || undefined,
             });
           } else {
-            crearUsuario({ nombre, username, password, rol });
+            crearUsuario({ nombre, username, password, rol, pregunta_seguridad, respuesta_seguridad });
           }
         }
       });

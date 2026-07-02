@@ -19,6 +19,7 @@ const tesoreriaRoutes = require("./routers/tesoreria.routes");
 const ajustesRoutes = require("./routers/ajustes.routes");
 const importarRoutes = require("./routers/importar.routes");
 const configuracionRoutes = require("./routers/configuracion.routes");
+const recuperacionRoutes = require("./routers/recuperacion.routes"); // 🔐 Sistema de recuperación de credenciales
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use("/api/tesoreria", tesoreriaRoutes);
 app.use("/api/ajustes", ajustesRoutes);
 app.use("/api/importar", importarRoutes);
 app.use("/api/configuracion", configuracionRoutes);
+app.use("/api/recuperacion", recuperacionRoutes); // 🔐 Preguntas de seguridad y restablecimiento de clave
 
 // 🎯 Endpoint para obtener configuración de la empresa
 app.get("/api/empresa", (req, res) => {

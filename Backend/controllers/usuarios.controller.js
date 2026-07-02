@@ -15,7 +15,7 @@ const SALT_ROUNDS = 10; // Factor de costo para el hashing. 10 es el estándar r
 const listarUsuarios = async (req, res, next) => {
   try {
     const [rows] = await db.query(
-      "SELECT id, nombre, username, rol FROM usuarios",
+      "SELECT id, nombre, username, rol, pregunta_seguridad FROM usuarios",
     );
     res.json(rows);
   } catch (error) {
@@ -27,10 +27,11 @@ const listarUsuarios = async (req, res, next) => {
  * @function crearUsuario
  * Crea un nuevo usuario en la base de datos con la contraseña encriptada con bcrypt.
  * Valida que el rol sea uno de los permitidos ('Vendedor', 'Administrador').
+ * También permite configurar la pregunta y respuesta de seguridad (Capa 1).
  */
 const crearUsuario = async (req, res, next) => {
   try {
-    const { nombre, username, password, rol } = req.body;
+    const { nombre, username, password, rol, pregunta_seguridad, respuesta_seguridad } = req.body;
 
     // Validación de campos obligatorios.
     if (!nombre || !username || !password || !rol) {
@@ -49,13 +50,20 @@ const crearUsuario = async (req, res, next) => {
     // Encriptar la contraseña antes de guardarla en la base de datos.
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
+    // Encriptar respuesta de seguridad si se proporciona
+    let hashRespuesta = null;
+    if (respuesta_seguridad && respuesta_seguridad.trim() !== "") {
+      const respuestaNormalizada = respuesta_seguridad.toLowerCase().trim();
+      hashRespuesta = await bcrypt.hash(respuestaNormalizada, SALT_ROUNDS);
+    }
+
     const [result] = await db.query(
-      "INSERT INTO usuarios (nombre, username, password, rol) VALUES (?, ?, ?, ?)",
-      [nombre, username, hashedPassword, rol],
+      "INSERT INTO usuarios (nombre, username, password, rol, pregunta_seguridad, respuesta_seguridad) VALUES (?, ?, ?, ?, ?, ?)",
+      [nombre, username, hashedPassword, rol, pregunta_seguridad || null, hashRespuesta],
     );
 
     // Respuesta exitosa sin devolver datos sensibles.
-    res.status(201).json({ id: result.insertId, nombre, username, rol });
+    res.status(201).json({ id: result.insertId, nombre, username, rol, pregunta_seguridad });
   } catch (error) {
     // Manejo de error para nombres de usuario duplicados.
     if (error.code === "ER_DUP_ENTRY") {
@@ -71,16 +79,24 @@ const crearUsuario = async (req, res, next) => {
  * @function actualizarUsuario
  * Actualiza los datos de un usuario existente.
  * Si se proporciona una nueva contraseña, se encripta antes de guardarla.
+ * También permite actualizar la pregunta y respuesta de seguridad.
  */
 const actualizarUsuario = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { nombre, username, password, rol } = req.body;
+    const { nombre, username, password, rol, pregunta_seguridad, respuesta_seguridad } = req.body;
 
     // Encriptación de contraseña si se proporciona una nueva.
     let hashedPassword = null;
     if (password && password.trim() !== "") {
       hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+    }
+
+    // Encriptar respuesta de seguridad si se proporciona
+    let hashRespuesta = null;
+    if (respuesta_seguridad && respuesta_seguridad.trim() !== "") {
+      const respuestaNormalizada = respuesta_seguridad.toLowerCase().trim();
+      hashRespuesta = await bcrypt.hash(respuestaNormalizada, SALT_ROUNDS);
     }
 
     // Construcción dinámica de la consulta SQL para actualizar solo los campos enviados.
@@ -107,6 +123,14 @@ const actualizarUsuario = async (req, res, next) => {
     if (hashedPassword) {
       query += "password = ?, ";
       params.push(hashedPassword);
+    }
+    if (pregunta_seguridad !== undefined) {
+      query += "pregunta_seguridad = ?, ";
+      params.push(pregunta_seguridad || null);
+    }
+    if (hashRespuesta) {
+      query += "respuesta_seguridad = ?, ";
+      params.push(hashRespuesta);
     }
 
     // Si no hay parámetros para actualizar, no se hace nada.
